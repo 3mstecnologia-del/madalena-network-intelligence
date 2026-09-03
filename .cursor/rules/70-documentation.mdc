@@ -1,0 +1,35 @@
+---
+description: Documentation, ADRs, and this-repo development workflows
+globs: docs/**,README.md,CONTRIBUTING.md,AGENTS.md,SECURITY.md
+alwaysApply: false
+---
+
+# Documentation and workflow
+
+Docs are part of the product. Prefer improving a canonical file over a parallel copy.
+
+Index: `docs/README.md`.
+
+| Need | Canonical file |
+|------|----------------|
+| Product architecture | `docs/architecture/overview.md` |
+| Implementation snapshot | `docs/architecture.md` |
+| Collector specs | `docs/collectors.md` |
+| New collector workflow | `docs/development/adding-a-collector.md` |
+| Data concepts | `docs/data-model/concepts.md` |
+| Tables / indexes | `docs/database-model.md` |
+| Testing | `docs/testing/strategy.md` |
+| Local Docker ops | `docs/operations/local-development.md` |
+| Durable decisions | `docs/decisions/` |
+
+Do not document real customer access, credentials, or private infrastructure.
+
+## ADRs
+
+Use a light ADR (Context / Decision / Consequences / Status) only for durable material choices: history model, tenant isolation, pre-persistence exclusion, transport strategy, correlation confidence. Skip ADRs for trivial details.
+
+## This-repo workflows (Git global rules stay in User Rules)
+
+New collector: SPEC → transport/driver contract → synthetic parser fixtures → unit tests → persistence/correlation → API/MCP if needed → integration tests → optional lab → review.
+
+Bug: reproduce → regression test → minimal fix → relevant integration test → docs if the contract changed.
