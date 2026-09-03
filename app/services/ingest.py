@@ -1,4 +1,10 @@
-"""Persist normalized collector results with temporal upserts. Tenant-scoped."""
+"""Persist normalized collector results with temporal upserts. Tenant-scoped.
+
+History is preserved: upserts update last_seen on the matching observation key
+and insert a new row when the key changes (e.g. MAC moves interface or IP).
+Absence of a row in a later run is not treated as proof of absence — rows are
+never deleted here.
+"""
 
 from __future__ import annotations
 
@@ -12,13 +18,17 @@ from sqlalchemy.orm import Session
 from app.models.entities import (
     ArpObservation,
     CollectionRun,
+    Device,
     DhcpLease,
+    Interface,
     IpAddress,
     MacAddress,
     MacObservation,
+    NeighborObservation,
     OltMacObservation,
     OltOnu,
 )
+from collectors.common.transport import sanitize_error
 from collectors.common.types import CollectorResult
 
 
@@ -43,11 +53,20 @@ class IngestService:
         tenant_id: UUID,
         collector_type: str,
         device_id: Optional[UUID] = None,
+        site_id: Optional[UUID] = None,
+        collector_version: Optional[str] = None,
     ) -> CollectionRun:
+        if site_id is None and device_id is not None:
+            device = self.db.get(Device, device_id)
+            if device is not None and device.tenant_id == tenant_id:
+                site_id = device.site_id
         run = CollectionRun(
             tenant_id=tenant_id,
             device_id=device_id,
+            site_id=site_id,
             collector_type=collector_type,
+            collector_version=collector_version,
+            completeness="unknown",
             status="running",
             started_at=utcnow(),
         )
@@ -64,13 +83,23 @@ class IngestService:
         created: int = 0,
         updated: int = 0,
         error: Optional[str] = None,
+        completeness: Optional[str] = None,
+        commands_ok: int = 0,
+        commands_failed: int = 0,
+        collector_version: Optional[str] = None,
     ) -> CollectionRun:
         run.status = status
         run.finished_at = utcnow()
         run.records_seen = seen
         run.records_created = created
         run.records_updated = updated
-        run.error_summary = error
+        run.error_summary = sanitize_error(error) if error else None
+        if completeness is not None:
+            run.completeness = completeness
+        run.commands_ok = commands_ok
+        run.commands_failed = commands_failed
+        if collector_version:
+            run.collector_version = collector_version
         self.db.add(run)
         return run
 
@@ -85,6 +114,15 @@ class IngestService:
         created = updated = 0
         seen = 0
         run_id = run.id if run else None
+
+        if result.identity:
+            self._apply_identity(tenant_id, device_id, result.identity)
+
+        for iface in result.interfaces:
+            seen += 1
+            c, u = self._upsert_interface(tenant_id, device_id, iface)
+            created += c
+            updated += u
 
         for lease in result.dhcp:
             seen += 1
@@ -109,6 +147,16 @@ class IngestService:
             created += c
             updated += u
 
+        for neighbor in result.neighbors:
+            seen += 1
+            if neighbor.mac:
+                self._touch_mac(tenant_id, neighbor.mac, neighbor.observed_at)
+            if neighbor.ip_address:
+                self._touch_ip(tenant_id, neighbor.ip_address, neighbor.observed_at)
+            c, u = self._upsert_neighbor(tenant_id, device_id, neighbor, run_id)
+            created += c
+            updated += u
+
         for onu in result.onus:
             seen += 1
             c, u = self._upsert_onu(tenant_id, device_id, onu)
@@ -124,6 +172,17 @@ class IngestService:
 
         self.db.flush()
         return {"seen": seen, "created": created, "updated": updated}
+
+    def _apply_identity(self, tenant_id: UUID, device_id: UUID, identity) -> None:
+        device = self.db.get(Device, device_id)
+        if device is None or device.tenant_id != tenant_id:
+            return
+        if identity.name:
+            device.last_identity = identity.name
+        if identity.version:
+            device.last_version = identity.version
+        device.last_observed_at = identity.observed_at
+        self.db.add(device)
 
     def _touch_mac(self, tenant_id: UUID, mac: str, when: datetime) -> None:
         row = self.db.scalar(
@@ -150,6 +209,38 @@ class IngestService:
             if _as_utc(when) > _as_utc(row.last_seen):
                 row.last_seen = when
             self.db.add(row)
+
+    def _upsert_interface(self, tenant_id, device_id, iface) -> tuple[int, int]:
+        row = self.db.scalar(
+            select(Interface).where(
+                Interface.device_id == device_id,
+                Interface.name == iface.name,
+            )
+        )
+        if row is None:
+            self.db.add(
+                Interface(
+                    tenant_id=tenant_id,
+                    device_id=device_id,
+                    name=iface.name,
+                    if_type=iface.if_type,
+                    admin_status=iface.admin_status,
+                    oper_status=iface.oper_status,
+                    mac=iface.mac,
+                    first_seen=iface.observed_at,
+                    last_seen=iface.observed_at,
+                    observed_at=iface.observed_at,
+                )
+            )
+            return 1, 0
+        row.if_type = iface.if_type or row.if_type
+        row.admin_status = iface.admin_status or row.admin_status
+        row.oper_status = iface.oper_status or row.oper_status
+        row.mac = iface.mac or row.mac
+        row.last_seen = iface.observed_at
+        row.observed_at = iface.observed_at
+        self.db.add(row)
+        return 0, 1
 
     def _upsert_dhcp(self, tenant_id, device_id, lease, run_id) -> tuple[int, int]:
         row = self.db.scalar(
@@ -190,12 +281,14 @@ class IngestService:
         return 0, 1
 
     def _upsert_arp(self, tenant_id, device_id, arp, run_id) -> tuple[int, int]:
+        # Key includes interface so a MAC moving ports keeps the prior ARP row.
         row = self.db.scalar(
             select(ArpObservation).where(
                 ArpObservation.tenant_id == tenant_id,
                 ArpObservation.device_id == device_id,
                 ArpObservation.mac == arp.mac,
                 ArpObservation.ip_address == arp.ip_address,
+                ArpObservation.interface == arp.interface,
             )
         )
         if row is None:
@@ -214,7 +307,6 @@ class IngestService:
                 )
             )
             return 1, 0
-        row.interface = arp.interface or row.interface
         row.last_seen = arp.observed_at
         row.observed_at = arp.observed_at
         row.collection_run_id = run_id
@@ -253,6 +345,42 @@ class IngestService:
         row.last_seen = fdb.observed_at
         row.observed_at = fdb.observed_at
         row.confidence = fdb.confidence
+        row.collection_run_id = run_id
+        self.db.add(row)
+        return 0, 1
+
+    def _upsert_neighbor(self, tenant_id, device_id, neighbor, run_id) -> tuple[int, int]:
+        row = self.db.scalar(
+            select(NeighborObservation).where(
+                NeighborObservation.tenant_id == tenant_id,
+                NeighborObservation.device_id == device_id,
+                NeighborObservation.mac == neighbor.mac,
+                NeighborObservation.ip_address == neighbor.ip_address,
+                NeighborObservation.interface == neighbor.interface,
+                NeighborObservation.identity == neighbor.identity,
+            )
+        )
+        if row is None:
+            self.db.add(
+                NeighborObservation(
+                    tenant_id=tenant_id,
+                    device_id=device_id,
+                    mac=neighbor.mac,
+                    ip_address=neighbor.ip_address,
+                    interface=neighbor.interface,
+                    identity=neighbor.identity,
+                    platform=neighbor.platform,
+                    first_seen=neighbor.observed_at,
+                    last_seen=neighbor.observed_at,
+                    observed_at=neighbor.observed_at,
+                    source=neighbor.source,
+                    collection_run_id=run_id,
+                )
+            )
+            return 1, 0
+        row.platform = neighbor.platform or row.platform
+        row.last_seen = neighbor.observed_at
+        row.observed_at = neighbor.observed_at
         row.collection_run_id = run_id
         self.db.add(row)
         return 0, 1

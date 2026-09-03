@@ -1,4 +1,8 @@
-"""Containerized collector scheduler (APScheduler). No host cron."""
+"""Containerized collector scheduler (APScheduler). No host cron.
+
+One device failure never deletes prior observations. Partial collection is
+recorded as completeness=partial. Errors are sanitized before persistence.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +16,9 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.models.entities import Device, DeviceCredentialReference
+from app.models.entities import CollectionRun, Device, DeviceCredentialReference
 from app.services.ingest import IngestService
+from collectors.common.transport import sanitize_error
 from collectors.intelbras_g08.collector import IntelbrasG08Collector
 from collectors.mikrotik.collector import MikroTikCollector
 
@@ -41,8 +46,37 @@ def _cred_prefix(db, device: Device) -> tuple[str, str]:
     return ref.secret_provider, ref.secret_prefix
 
 
+def _finish_from_meta(ingest: IngestService, run, result, stats: Optional[dict]) -> None:
+    meta = result.meta or {}
+    status = str(meta.get("status") or "ok")
+    completeness = str(meta.get("completeness") or "unknown")
+    if status in {"ok", "success"} and completeness == "complete":
+        persist_status = "success"
+    elif status in {"skipped", "not_implemented"}:
+        persist_status = status
+        completeness = completeness if completeness != "unknown" else "none"
+    elif completeness == "partial" or status == "partial":
+        persist_status = "partial"
+        completeness = "partial"
+    elif status == "error" or completeness == "none":
+        persist_status = "error"
+    else:
+        persist_status = status
+    ingest.finish_run(
+        run,
+        status=persist_status,
+        seen=(stats or {}).get("seen", 0),
+        created=(stats or {}).get("created", 0),
+        updated=(stats or {}).get("updated", 0),
+        error=meta.get("error_summary") or meta.get("reason") or meta.get("todo"),
+        completeness=completeness,
+        commands_ok=int(meta.get("commands_ok") or 0),
+        commands_failed=int(meta.get("commands_failed") or 0),
+        collector_version=meta.get("collector_version"),
+    )
+
+
 def run_mikrotik_lightweight() -> None:
-    """Phase 1: record skipped/not_implemented runs — no live equipment."""
     _run_by_type("mikrotik", lightweight=True)
 
 
@@ -74,57 +108,59 @@ def _run_by_type(device_type: str, lightweight: bool) -> None:
                 continue
             try:
                 provider, prefix = _cred_prefix(db, device)
+                collector_label = device_type + ("_light" if lightweight else "_full")
+                version = None
+                if device_type == "mikrotik":
+                    version = MikroTikCollector.collector_version
                 run = ingest.start_run(
                     tenant_id=device.tenant_id,
-                    collector_type=device_type + ("_light" if lightweight else "_full"),
+                    collector_type=collector_label,
                     device_id=device.id,
+                    site_id=device.site_id,
+                    collector_version=version,
                 )
+                db.commit()
                 try:
                     if device_type == "mikrotik":
                         collector = MikroTikCollector(provider, prefix)
-                        result = collector.collect_live()
+                        result = collector.collect_live(lightweight=lightweight)
                     else:
                         collector = IntelbrasG08Collector(provider, prefix)
                         result = collector.collect_live()
                     status = result.meta.get("status", "ok")
-                    if status in {"skipped", "not_implemented"}:
-                        ingest.finish_run(
-                            run,
-                            status=status,
-                            error=str(result.meta.get("reason") or result.meta.get("todo")),
-                        )
-                    else:
-                        stats = ingest.ingest_result(
-                            tenant_id=device.tenant_id,
-                            device_id=device.id,
-                            result=result,
-                            run=run,
-                        )
-                        ingest.finish_run(
-                            run,
-                            status="success",
-                            seen=stats["seen"],
-                            created=stats["created"],
-                            updated=stats["updated"],
-                        )
+                    stats = None
+                    if status not in {"skipped", "not_implemented", "error"} or (
+                        result.dhcp or result.arp or result.fdb or result.interfaces or result.neighbors
+                    ):
+                        if status not in {"skipped", "not_implemented"}:
+                            stats = ingest.ingest_result(
+                                tenant_id=device.tenant_id,
+                                device_id=device.id,
+                                result=result,
+                                run=run,
+                            )
+                    _finish_from_meta(ingest, run, result, stats)
                     db.commit()
                     log.info(
-                        "collection device=%s type=%s status=%s",
+                        "collection device=%s type=%s status=%s completeness=%s",
                         device.name,
                         device_type,
                         run.status,
+                        run.completeness,
                     )
                 except Exception as exc:  # noqa: BLE001
                     db.rollback()
-                    # Re-open a short error run record after rollback
-                    err_run = ingest.start_run(
-                        tenant_id=device.tenant_id,
-                        collector_type=device_type,
-                        device_id=device.id,
-                    )
-                    ingest.finish_run(err_run, status="error", error=str(exc)[:1000])
-                    db.commit()
-                    log.exception("collection failed device=%s", device.name)
+                    run = db.get(CollectionRun, run.id)
+                    if run is not None:
+                        ingest.finish_run(
+                            run,
+                            status="error",
+                            completeness="none",
+                            error=sanitize_error(str(exc)),
+                            collector_version=version,
+                        )
+                        db.commit()
+                    log.exception("collection failed device=%s — prior observations kept", device.name)
             finally:
                 lock.release()
     finally:
@@ -168,7 +204,6 @@ def main() -> None:
         settings.scheduler_olt_interval_sec,
         settings.scheduler_full_inventory_interval_sec,
     )
-    # Initial tick (safe — live collectors skip without secrets)
     run_mikrotik_lightweight()
     sched.start()
 
