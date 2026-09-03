@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+@dataclass
+class NormalizedDhcpLease:
+    mac: str
+    ip_address: str
+    hostname: Optional[str] = None
+    server: Optional[str] = None
+    status: Optional[str] = None
+    comment: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "mikrotik_dhcp"
+
+
+@dataclass
+class NormalizedArp:
+    mac: str
+    ip_address: str
+    interface: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "mikrotik_arp"
+
+
+@dataclass
+class NormalizedMacFdb:
+    mac: str
+    interface: Optional[str] = None
+    vlan_id: Optional[int] = None
+    bridge: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "bridge_fdb"
+    confidence: Optional[float] = 1.0
+
+
+@dataclass
+class NormalizedOnu:
+    ont_id: str
+    pon: Optional[str] = None
+    serial: Optional[str] = None
+    status: Optional[str] = None
+    profile_name: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+
+
+@dataclass
+class NormalizedOltMac:
+    mac: str
+    ont_id: Optional[str] = None
+    pon: Optional[str] = None
+    vlan_id: Optional[int] = None
+    gem: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "intelbras_g08_mac"
+
+
+@dataclass
+class CollectorResult:
+    dhcp: list[NormalizedDhcpLease] = field(default_factory=list)
+    arp: list[NormalizedArp] = field(default_factory=list)
+    fdb: list[NormalizedMacFdb] = field(default_factory=list)
+    onus: list[NormalizedOnu] = field(default_factory=list)
+    olt_macs: list[NormalizedOltMac] = field(default_factory=list)
+    meta: dict[str, Any] = field(default_factory=dict)

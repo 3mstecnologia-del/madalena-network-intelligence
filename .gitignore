@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Docker / local
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Lab dumps (never commit)
+*.backup
+*.rsc
+running-config*
+bkp*
+*.pdf

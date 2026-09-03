@@ -1,0 +1,117 @@
+name: madalena-ni
+
+networks:
+  madalena:
+    driver: bridge
+
+volumes:
+  madalena_pgdata:
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-madalena}
+      POSTGRES_USER: ${POSTGRES_USER:-madalena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_local_env_only}
+    volumes:
+      - madalena_pgdata:/var/lib/postgresql/data
+    networks:
+      - madalena
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - madalena
+    restart: "no"
+
+  api:
+    build: .
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - madalena
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    command: ["python", "-m", "scheduler.main"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      SCHEDULER_MIKROTIK_INTERVAL_SEC: ${SCHEDULER_MIKROTIK_INTERVAL_SEC:-900}
+      SCHEDULER_OLT_INTERVAL_SEC: ${SCHEDULER_OLT_INTERVAL_SEC:-1800}
+      SCHEDULER_FULL_INVENTORY_INTERVAL_SEC: ${SCHEDULER_FULL_INVENTORY_INTERVAL_SEC:-21600}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    networks:
+      - madalena
+    healthcheck:
+      test: ["CMD", "python", "-c", "import scheduler.main; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  mcp:
+    build: .
+    command: ["python", "-m", "mcp_server"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
+      API_BASE_URL: http://api:8000
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: 8081
+    ports:
+      - "8081:8081"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - madalena
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped

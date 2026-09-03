@@ -1,0 +1,420 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+  - uuid: e82232a2235a4012bba23cb48367302f
+    name: Templates/Intelbras
+  templates:
+  - uuid: 29f6a194ad584c29ad9cd024c0436798
+    template: Template Madalena Intelbras G08 SNMP
+    name: Template Madalena Intelbras G08 SNMP
+    description: 'Madalena Production - Intelbras G08 SNMP template. Adapted from the supplied Template Madalena Intelbras
+      G08 SNMP export for Zabbix 7.0. ONU discovery remains inside the OLT host using item/trigger/graph prototypes; per-ONU
+      host prototypes were intentionally removed. Original description: Template OLTG16 - Unidade Redes Fibra Optica'
+    groups:
+    - name: Templates/Intelbras
+    items:
+    - uuid: fc12aa246cc3471db3ebbcab09b63f98
+      name: CPU Load
+      type: SNMP_AGENT
+      snmp_oid: iso.3.6.1.4.1.13464.1.14.2.1.3.1.0
+      key: CPULoad
+      history: 30d
+      trends: 90d
+      units: '%'
+      tags:
+      - tag: Application
+        value: Device Info
+      triggers:
+      - uuid: 202276c408a24e55936678a35e5d0531
+        expression: avg(/Template Madalena Intelbras G08 SNMP/CPULoad,10m)>{$CPU_BUSY}
+        name: CPU Busy
+        priority: HIGH
+        manual_close: 'YES'
+    - uuid: 4233a5dfb1704b00a64eadab81f10713
+      name: GPON Chipset Temp
+      type: SNMP_AGENT
+      snmp_oid: iso.3.6.1.4.1.13464.1.14.2.1.3.4.0
+      key: GPONChipsetTemp
+      delay: 5m
+      history: 30d
+      trends: 90d
+      units: °C
+      tags:
+      - tag: Application
+        value: Device Info
+    - uuid: 03a7cc93cdc64c9c88a5253e16d4939e
+      name: Memory Load
+      type: SNMP_AGENT
+      snmp_oid: iso.3.6.1.4.1.13464.1.14.2.1.3.2.0
+      key: MemoryLoad
+      history: 30d
+      trends: 90d
+      units: '%'
+      tags:
+      - tag: Application
+        value: Device Info
+      triggers:
+      - uuid: 8433d58f64d0460395089d1fb48a674a
+        expression: avg(/Template Madalena Intelbras G08 SNMP/MemoryLoad,10m)>{$OUT_MEMORY}
+        name: Running out of memory
+        priority: HIGH
+        manual_close: 'YES'
+    - uuid: eb27261ff8e04315b898941f28b8ec6c
+      name: Switch Chipset Temp
+      type: SNMP_AGENT
+      snmp_oid: iso.3.6.1.4.1.13464.1.14.2.1.3.3.0
+      key: SwitchChipsetTemp
+      delay: 5m
+      history: 30d
+      trends: 90d
+      units: °C
+      tags:
+      - tag: Application
+        value: Device Info
+    discovery_rules:
+    - uuid: 24a0ce00a1924fdb95fd0291db729537
+      name: ONU Status
+      type: SNMP_AGENT
+      snmp_oid: discovery[{#PON},1.3.6.1.4.1.13464.1.14.2.4.1.1.1.2,{#ID},1.3.6.1.4.1.13464.1.14.2.4.1.1.1.3]
+      key: ONUsRUNGPON
+      delay: 10m
+      lifetime: 1d
+      enabled_lifetime_type: DISABLE_NEVER
+      item_prototypes:
+      - uuid: 9930b82b77f94ebc96721a679f1bdb16
+        name: Model GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.1.1.5.0.{#PON}.{#ID}
+        key: Model[{#PON}{#ID}]
+        delay: 10m
+        history: 7d
+        value_type: TEXT
+        trends: '0'
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+      - uuid: 6562ccbe852741679cd1dce129cffd04
+        name: GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.1.1.6.0.{#PON}.{#ID}
+        key: ONU[{#PON}{#ID}]
+        history: 30d
+        trends: 90d
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+        trigger_prototypes:
+        - uuid: 1b22ba3efb954ed8a63f011816246b1d
+          expression: count(/Template Madalena Intelbras G08 SNMP/ONU[{#PON}{#ID}],#10,,"0")=10
+          name: GPON {#PON} ONU {#ID} DOWN
+          priority: WARNING
+          manual_close: 'YES'
+        - uuid: 5c4ac520760c47e0865e26aab126bbad
+          expression: last(/Template Madalena Intelbras G08 SNMP/ONU[{#PON}{#ID}])<>1
+          name: ONU {#PON}/{#ID} Offline
+          priority: HIGH
+      - uuid: 7cb9ad0bc2b64c1e8ca7f2781c893215
+        name: Downstream GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: iso.3.6.1.4.1.13464.1.14.2.4.1.7.1.7.0.{#PON}.{#ID}
+        key: RXBytesGPONONU[{#PON}{#ID}]
+        delay: 30s
+        history: 5d
+        trends: 90d
+        units: bps
+        preprocessing:
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        - type: CHANGE_PER_SECOND
+          parameters:
+          - ''
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+      - uuid: 76701965a4e9409684b3b9b443be9903
+        name: RX GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.9.1.5.0.{#PON}.{#ID}
+        key: RX[{#PON}{#ID}]
+        delay: 10m
+        history: 30d
+        value_type: FLOAT
+        trends: 90d
+        tags:
+        - tag: metric
+          value: rx
+        - tag: onu
+          value: '{#ID}'
+        - tag: pon
+          value: '{#PON}'
+        - tag: type
+          value: gpon
+        trigger_prototypes:
+        - uuid: dbdac127246b4fdd8ee22ca93a5acb18
+          expression: last(/Template Madalena Intelbras G08 SNMP/RX[{#PON}{#ID}])<-27
+          name: ONU {#PON}/{#ID} - RX baixo
+          priority: HIGH
+      - uuid: 1d539468cdf94fb08f0f8928b2620815
+        name: SN GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.1.1.8.0.{#PON}.{#ID}
+        key: SN[{#PON}{#ID}]
+        delay: 10m
+        history: 7d
+        value_type: TEXT
+        trends: '0'
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+      - uuid: 00817128df5045448afbadb818314358
+        name: Upstream GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: iso.3.6.1.4.1.13464.1.14.2.4.1.7.1.5.0.{#PON}.{#ID}
+        key: TXBytesGPONONU[{#PON}{#ID}]
+        delay: 30s
+        history: 5d
+        trends: 90d
+        units: bps
+        preprocessing:
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        - type: CHANGE_PER_SECOND
+          parameters:
+          - ''
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+      - uuid: ace0d7df32cf40629a94ed5b6ebfd6ab
+        name: TX GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.9.1.6.0.{#PON}.{#ID}
+        key: TX[{#PON}{#ID}]
+        delay: 10m
+        history: 30d
+        value_type: FLOAT
+        trends: 90d
+        tags:
+        - tag: metric
+          value: tx
+        - tag: onu
+          value: '{#ID}'
+        - tag: pon
+          value: '{#PON}'
+        - tag: type
+          value: gpon
+      - uuid: 291a6718f9e54d4eaf09d5dbddce87a2
+        name: UpTime GPON {#PON} ONU {#ID}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.4.1.13464.1.14.2.4.1.1.1.14.0.{#PON}.{#ID}
+        key: UPTime[{#PON}{#ID}]
+        delay: 2m
+        history: 7d
+        value_type: TEXT
+        trends: '0'
+        tags:
+        - tag: Application
+          value: GPON {#PON} - ONU {#ID}
+      graph_prototypes:
+      - uuid: 2f77a111a5394d4fb6ef7de043f26101
+        name: GPON RX/TX {#PON} {#ID}
+        graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: RX[{#PON}{#ID}]
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: ALL
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: TX[{#PON}{#ID}]
+      - uuid: b8a8445bf3784235b3f9da312df3aa63
+        name: GPON USE BAND
+        graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: RXBytesGPONONU[{#PON}{#ID}]
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: ALL
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: TXBytesGPONONU[{#PON}{#ID}]
+    - uuid: ff512bb3ac184c0aad02d97be08e1ac9
+      name: Interface Status
+      type: SNMP_AGENT
+      snmp_oid: discovery[{#REDE},1.3.6.1.2.1.31.1.1.1.1,{#VELO},1.3.6.1.2.1.2.2.1.5]
+      key: PortStatus
+      delay: 1h
+      lifetime: 1d
+      enabled_lifetime_type: DISABLE_NEVER
+      item_prototypes:
+      - uuid: 4d6c68c2e80d4741930d481e0ce02f2b
+        name: RX Bandwidth {#REDE}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.2.1.2.2.1.10.{#SNMPINDEX}
+        key: RXBandwidth[{#REDE}]
+        delay: 30s
+        history: 5d
+        trends: 90d
+        units: bps
+        preprocessing:
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        - type: CHANGE_PER_SECOND
+          parameters:
+          - ''
+        tags:
+        - tag: Application
+          value: '{#REDE}'
+        trigger_prototypes:
+        - uuid: 773fe5e48cee4625b5883c6472f68cfd
+          expression: avg(/Template Madalena Intelbras G08 SNMP/RXBandwidth[{#REDE}],#5)>(0.7*{#VELO}) and {#VELO}>0
+          name: High incomming traffic in {#REDE}
+          priority: AVERAGE
+          manual_close: 'YES'
+      - uuid: 32b9f1c6bc2949c1867b8508c1307a4c
+        name: Status {#REDE}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.2.1.2.2.1.8.{#SNMPINDEX}
+        key: Status[{#REDE}]
+        delay: 30s
+        history: 5d
+        trends: 90d
+        tags:
+        - tag: Application
+          value: '{#REDE}'
+        trigger_prototypes:
+        - uuid: 3eefff90668b420e847005684081510d
+          expression: change(/Template Madalena Intelbras G08 SNMP/Status[{#REDE}])=1
+          recovery_mode: RECOVERY_EXPRESSION
+          recovery_expression: last(/Template Madalena Intelbras G08 SNMP/Status[{#REDE}])=1
+          name: Port {#REDE} down
+          priority: HIGH
+          manual_close: 'YES'
+      - uuid: 59f43b40571a486facb27164c98c17dc
+        name: TX Bandwidth {#REDE}
+        type: SNMP_AGENT
+        snmp_oid: 1.3.6.1.2.1.2.2.1.16.{#SNMPINDEX}
+        key: TXBandwidth[{#REDE}]
+        delay: 30s
+        history: 5d
+        trends: 90d
+        units: bps
+        preprocessing:
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        - type: CHANGE_PER_SECOND
+          parameters:
+          - ''
+        tags:
+        - tag: Application
+          value: '{#REDE}'
+        trigger_prototypes:
+        - uuid: 9228ff34bedd47b5846a627e58f86e79
+          expression: avg(/Template Madalena Intelbras G08 SNMP/TXBandwidth[{#REDE}],#5)> (0.7*{#VELO}) and {#VELO}>0
+          name: High outgoing traffic in {#REDE}
+          priority: AVERAGE
+          manual_close: 'YES'
+      graph_prototypes:
+      - uuid: abf47b66bba64614af6f67a6da3425ba
+        name: Traffic Load {#REDE}
+        graph_items:
+        - sortorder: '1'
+          color: 1A7C11
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: RXBandwidth[{#REDE}]
+        - sortorder: '2'
+          color: F63100
+          item:
+            host: Template Madalena Intelbras G08 SNMP
+            key: TXBandwidth[{#REDE}]
+    macros:
+    - macro: '{$CPU_BUSY}'
+      value: '70'
+    - macro: '{$HIGH_TEMP}'
+      value: '70'
+    - macro: '{$OUT_MEMORY}'
+      value: '95'
+    dashboards:
+    - uuid: ad42448cf5434db880411d014c21929c
+      name: Hardware Status
+      pages:
+      - widgets:
+        - type: graph
+          width: '72'
+          height: '5'
+          fields:
+          - type: GRAPH
+            name: graphid
+            value:
+              host: Template Madalena Intelbras G08 SNMP
+              name: Hardware Load
+          - type: STRING
+            name: reference
+            value: AAAAA
+          - type: INTEGER
+            name: source_type
+            value: '0'
+        - type: graph
+          y: '5'
+          width: '72'
+          height: '5'
+          fields:
+          - type: GRAPH
+            name: graphid
+            value:
+              host: Template Madalena Intelbras G08 SNMP
+              name: Chipset Temp
+          - type: STRING
+            name: reference
+            value: AAAAB
+          - type: INTEGER
+            name: source_type
+            value: '0'
+  triggers:
+  - uuid: 3449699d07c74a21b40280fb1ee8aea7
+    expression: min(/Template Madalena Intelbras G08 SNMP/GPONChipsetTemp,15m)>{$HIGH_TEMP} or min(/Template Madalena Intelbras
+      G08 SNMP/SwitchChipsetTemp,15m)>{$HIGH_TEMP}
+    name: High temperature
+    priority: DISASTER
+    manual_close: 'YES'
+  graphs:
+  - uuid: aadf241dd3794c31a0fd6447e42cc5a7
+    name: Chipset Temp
+    show_triggers: 'NO'
+    graph_items:
+    - sortorder: '1'
+      color: 1A7C11
+      item:
+        host: Template Madalena Intelbras G08 SNMP
+        key: GPONChipsetTemp
+    - sortorder: '2'
+      color: F63100
+      item:
+        host: Template Madalena Intelbras G08 SNMP
+        key: SwitchChipsetTemp
+  - uuid: 7c8c38a1161d4a2d91ee8e1717230488
+    name: Hardware Load
+    show_triggers: 'NO'
+    ymin_type_1: FIXED
+    ymax_type_1: FIXED
+    graph_items:
+    - sortorder: '1'
+      color: 1A7C11
+      item:
+        host: Template Madalena Intelbras G08 SNMP
+        key: CPULoad
+    - sortorder: '2'
+      color: F63100
+      item:
+        host: Template Madalena Intelbras G08 SNMP
+        key: MemoryLoad

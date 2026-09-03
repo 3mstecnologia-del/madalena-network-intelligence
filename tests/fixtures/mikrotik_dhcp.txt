@@ -1,0 +1,6 @@
+Flags: X - disabled, R - radius, D - dynamic, B - blocked
+ 0   address=10.30.1.50 mac-address=AA:BB:CC:DD:EE:FF 
+     host-name=notebook-exemplo server=dhcp-corp status=bound
+
+ 1   address=10.30.1.51 mac-address=11:22:33:44:55:66 
+     host-name=printer-lab server=dhcp-corp status=bound

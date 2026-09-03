@@ -1,0 +1,3 @@
+Flags: D - dynamic, L - local, E - external
+ 0   D mac-address=AA:BB:CC:DD:EE:FF on-interface=sfp-sfpplus2 bridge=bridge-lan vid=30
+ 1   D mac-address=11:22:33:44:55:66 on-interface=ether3 bridge=bridge-lan vid=30
