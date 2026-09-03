@@ -1,5 +1,7 @@
 # Architecture
 
+Canonical product architecture (purpose, layers, temporal model, provenance): [architecture/overview.md](architecture/overview.md). This file is the implementation snapshot.
+
 ## Data flow
 
 1. Scheduler triggers collectors per interval (MikroTik light / OLT / full inventory).

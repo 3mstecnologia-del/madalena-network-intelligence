@@ -20,12 +20,12 @@ make secret-scan
 
 ## Adding a collector
 
-1. Create `collectors/<vendor>/parsers.py` (pure, fixture-tested)
-2. Create `collectors/<vendor>/collector.py` (transport separate from parsers)
-3. Register device_type and scheduler job
-4. Document commands only when validated; mark TODOs otherwise
-5. Never invent vendor CLI
+Full workflow (spec → allowlist → synthetic fixtures → tests → ingest → API/MCP → optional lab): [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md).
+
+Definition of done and test matrix: [`docs/testing/strategy.md`](docs/testing/strategy.md).
 
 ## Adding a tenant
 
-Use the API/DB seed pattern: Tenant → Site → Device → DeviceCredentialReference (secret prefix only).
+Use the API/DB seed pattern: Tenant → Site → Device → DeviceCredentialReference (secret prefix only). Do not hardcode customer topology.
+
+Project Rules: `.cursor/rules/`. Docs index: `docs/README.md`.
