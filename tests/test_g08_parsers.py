@@ -17,7 +17,7 @@ def test_parse_ont_mac_table():
 
 def test_parse_ont_mac_address_dotted():
     text = (FIX / "g08_mac_address.txt").read_text()
-    rows = parse_ont_mac_address(text)
+    rows = parse_ont_mac_address(text, command="show ont mac-address")
     assert len(rows) == 2
     assert rows[0].mac == "AA:BB:CC:DD:EE:FF"
     assert rows[0].ont_id == "0/1/14"

@@ -54,6 +54,26 @@ def test_mcp_find_mac_requires_tenant(db: Session, monkeypatch):
     assert res.status_code == 422
 
 
+def test_mcp_find_ip(db: Session, monkeypatch):
+    t1, _, d1, _, _, _ = seed_two_tenants(db)
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(
+            dhcp=[NormalizedDhcpLease(mac=MAC, ip_address="10.30.1.50", hostname="notebook-exemplo")]
+        ),
+    )
+    db.commit()
+    client = _client(db, monkeypatch)
+    res = client.post("/tools/find_ip", json={"tenant": "example-tenant", "ip": "10.30.1.50"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert MAC in (body.get("text") or "")
+    macs = [m.get("mac") for m in (body.get("data") or {}).get("macs", [])]
+    assert MAC in macs
+
+
 def test_mcp_get_mac_history(db: Session, monkeypatch):
     t1, _, d1, _, _, _ = seed_two_tenants(db)
     from datetime import datetime, timezone

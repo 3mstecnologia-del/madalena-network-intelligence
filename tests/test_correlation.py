@@ -41,6 +41,7 @@ def test_correlation_mac_ip_onu(db: Session):
     assert corr.access_path is not None
     assert corr.access_path.onu == "0/1/14"
     assert corr.access_path.pon == "0/1"
+    assert corr.access_path.vlan_id == 30
     assert corr.access_path.profile == "CORPORATIVO"
     assert corr.fdb[0]["interface"] == "sfp-sfpplus2"
 

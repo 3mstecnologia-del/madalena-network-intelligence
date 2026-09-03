@@ -38,6 +38,7 @@ class AccessPath:
     olt_device_id: Optional[str] = None
     pon: Optional[str] = None
     onu: Optional[str] = None
+    vlan_id: Optional[int] = None
     profile: Optional[str] = None
     serial: Optional[str] = None
 
@@ -307,6 +308,7 @@ class CorrelationEngine:
                     olt_device_id=str(device.id) if device else None,
                     pon=row.pon,
                     onu=row.ont_id,
+                    vlan_id=row.vlan_id,
                     profile=profile,
                     serial=serial,
                 )

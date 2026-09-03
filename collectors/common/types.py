@@ -17,6 +17,9 @@ class NormalizedDhcpLease:
     server: Optional[str] = None
     status: Optional[str] = None
     comment: Optional[str] = None
+    lease_kind: Optional[str] = None
+    client_id: Optional[str] = None
+    reported_last_seen: Optional[str] = None
     observed_at: datetime = field(default_factory=utcnow)
     source: str = "mikrotik_dhcp"
 

@@ -122,9 +122,11 @@ def test_g08_readonly_refuses_config():
 
 
 def test_g08_readonly_allows_show_mac():
-    inner = MemoryTransport({"show ont mac-address": "ONT ID MAC\n0/1/14 AA:BB:CC:DD:EE:FF"})
+    inner = MemoryTransport(
+        {"show ont mac-address-table interface gpon all": "ONT ID MAC\n0/1/14 AA:BB:CC:DD:EE:FF"}
+    )
     guarded = ReadOnlyTransport(inner, G08_READ_ALLOWLIST)
-    result = guarded.execute("show ont mac-address")
+    result = guarded.execute("show ont mac-address-table interface gpon all")
     assert result.ok
 
 
@@ -150,6 +152,29 @@ def test_memory_transport_missing_command():
         transport.execute("/ip arp print detail")
 
 
+def test_mikrotik_dhcp_partial_parse():
+    transport = MemoryTransport(
+        {"/ip dhcp-server lease print detail without-paging": (FIX / "mikrotik_dhcp_partial.txt").read_text()}
+    )
+    result = MikroTikCollector("env", "EXAMPLE").collect_via_transport(transport, dhcp_only=True)
+    assert result.meta["completeness"] == "partial"
+    assert result.meta["status"] == "partial"
+    assert result.meta["parse_failures"] == 1
+    assert len(result.dhcp) == 1
+
+
+def test_mikrotik_command_failure_is_error():
+    transport = MemoryTransport(
+        {},
+        errors={"/ip dhcp-server lease print detail without-paging": "syntax error"},
+    )
+    result = MikroTikCollector("env", "EXAMPLE").collect_via_transport(transport, dhcp_only=True)
+    assert result.meta["status"] == "error"
+    assert result.meta["completeness"] == "none"
+    assert result.meta["commands_failed"] == 1
+    assert "syntax error" in (result.meta.get("error_summary") or "")
+
+
 def test_mikrotik_dhcp_only():
     transport = MemoryTransport(
         {"/ip dhcp-server lease print detail without-paging": (FIX / "mikrotik_dhcp.txt").read_text()}
@@ -161,27 +186,25 @@ def test_mikrotik_dhcp_only():
     assert result.arp == []
 
 
-def test_g08_login_error_body_is_incomplete_fallback():
+def test_g08_driver_uses_table_command_only():
     from collectors.intelbras_g08.collector import IntelbrasG08Collector
+    from collectors.intelbras_g08.readonly import G08_MAC_TABLE_COMMAND
 
     transport = MemoryTransport(
-        {
-            "show ont mac-address": "Username or password error\nUsername(1-64 chars):",
-            "show ont mac-address-table interface gpon all": (FIX / "g08_mac_address.txt").read_text(),
-        }
+        {G08_MAC_TABLE_COMMAND: (FIX / "g08_mac_vid_table.txt").read_text()}
     )
     result = IntelbrasG08Collector("env", "EXAMPLE").collect_via_transport(transport)
     assert result.meta["status"] == "ok"
+    assert result.meta["command"] == G08_MAC_TABLE_COMMAND
+    assert transport.calls == [G08_MAC_TABLE_COMMAND]
     assert len(result.olt_macs) == 2
-    assert transport.calls[0] == "show ont mac-address"
-    assert "mac-address-table" in transport.calls[1]
 
 
 def test_g08_collect_via_transport():
     from collectors.intelbras_g08.collector import IntelbrasG08Collector
 
     transport = MemoryTransport(
-        {"show ont mac-address": (FIX / "g08_mac_address.txt").read_text()}
+        {"show ont mac-address-table interface gpon all": (FIX / "g08_mac_address.txt").read_text()}
     )
     collector = IntelbrasG08Collector("env", "EXAMPLE")
     result = collector.collect_via_transport(transport)

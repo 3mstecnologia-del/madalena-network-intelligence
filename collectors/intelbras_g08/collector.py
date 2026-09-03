@@ -1,11 +1,14 @@
 """Intelbras G08 collector — parsers + optional live interactive CLI.
 
-Live path uses runtime secrets + a read-only allowlist. Tests use MemoryTransport
-or collect_from_texts. No customer hosts in this module.
+Live path uses runtime secrets + a show-only allowlist. The G08 driver command is
+`show ont mac-address-table interface gpon all` (live evidence: the short form
+`show ont mac-address` is incomplete on this family). Tests use MemoryTransport
+or collect_from_texts.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from collectors.common.cli_interactive import InteractiveCliTransport
@@ -25,17 +28,18 @@ from collectors.intelbras_g08.parsers import (
 )
 from collectors.intelbras_g08.readonly import (
     COLLECTOR_VERSION,
-    G08_MAC_COMMAND_FALLBACK,
-    G08_MAC_COMMANDS,
+    G08_FAMILY,
+    G08_MAC_TABLE_COMMAND,
     G08_READ_ALLOWLIST,
 )
 
 DOCUMENTED_COMMANDS = {
-    "ont_mac_address": "show ont mac-address",
-    "ont_mac_table": "show ont mac-address-table interface gpon all",
+    "ont_mac_table": G08_MAC_TABLE_COMMAND,
     "ont_brief": "show ont brief interface gpon all",
     "ont_find": "show ont-find list interface gpon all",
 }
+
+_TOTAL = re.compile(r"(?i)total entries:\s*(\d+)")
 
 
 class IntelbrasG08Collector:
@@ -52,7 +56,7 @@ class IntelbrasG08Collector:
         *,
         ont_brief_text: str = "",
         mac_table_text: str = "",
-        mac_command: str = "show ont mac-address",
+        mac_command: str = G08_MAC_TABLE_COMMAND,
     ) -> CollectorResult:
         olt_macs = (
             parse_ont_mac_address(mac_table_text, command=mac_command, source="olt")
@@ -60,77 +64,53 @@ class IntelbrasG08Collector:
             else []
         )
         onus = parse_ont_brief(ont_brief_text) if ont_brief_text else onus_from_macs(olt_macs)
+        declared = _declared_total(mac_table_text)
+        parse_failures = max(0, declared - len(olt_macs)) if declared is not None else 0
+        if olt_macs and parse_failures == 0:
+            completeness = "complete"
+        elif olt_macs:
+            completeness = "partial"
+        else:
+            completeness = "none"
         return CollectorResult(
             onus=onus,
             olt_macs=olt_macs,
             meta={
                 "mode": "text",
+                "family": G08_FAMILY,
                 "documented_commands": DOCUMENTED_COMMANDS,
                 "collector_version": self.collector_version,
-                "completeness": "complete" if olt_macs or onus else "none",
+                "command": mac_command,
+                "declared_entries": declared,
+                "parse_failures": parse_failures,
+                "completeness": completeness,
             },
         )
 
     def collect_via_transport(self, transport: Transport) -> CollectorResult:
         guarded = ReadOnlyTransport(transport, G08_READ_ALLOWLIST)
-        texts: dict[str, str] = {}
-        errors: list[str] = []
-        ok = failed = 0
-        used_command = G08_MAC_COMMANDS[0][1]
-        for key, command in G08_MAC_COMMANDS:
-            try:
-                result = guarded.execute(command)
-            except ReadOnlyViolation as exc:
-                errors.append(sanitize_error(str(exc)))
-                failed += 1
-                continue
-            except TransportError as exc:
-                errors.append(sanitize_error(str(exc)))
-                failed += 1
-                continue
-            body = result.stdout or ""
-            if result.ok and body.strip() and not _looks_incomplete(body):
-                texts[key] = body
-                used_command = command
-                ok += 1
-                continue
-            try:
-                fallback = guarded.execute(G08_MAC_COMMAND_FALLBACK)
-            except (ReadOnlyViolation, TransportError) as exc:
-                errors.append(sanitize_error(str(exc)))
-                failed += 1
-                continue
-            if fallback.ok and (fallback.stdout or "").strip():
-                texts[key] = fallback.stdout
-                used_command = G08_MAC_COMMAND_FALLBACK
-                ok += 1
-            else:
-                errors.append(sanitize_error(fallback.stderr or "empty mac-address output"))
-                failed += 1
-
-        parsed = self.collect_from_texts(
-            mac_table_text=texts.get("mac_table", ""),
-            mac_command=used_command,
-        )
-        if failed == 0 and ok:
-            completeness = "complete"
-            status = "ok"
-        elif ok == 0:
-            completeness = "none"
-            status = "error"
-        else:
-            completeness = "partial"
-            status = "partial"
+        command = G08_MAC_TABLE_COMMAND
+        try:
+            result = guarded.execute(command)
+        except ReadOnlyViolation as exc:
+            return self._failed(sanitize_error(str(exc)), command)
+        except TransportError as exc:
+            return self._failed(sanitize_error(str(exc)), command)
+        body = result.stdout or ""
+        if not result.ok or not body.strip():
+            return self._failed(sanitize_error(result.stderr or "empty mac-address-table output"), command)
+        parsed = self.collect_from_texts(mac_table_text=body, mac_command=command)
+        completeness = parsed.meta.get("completeness", "none")
+        status = "ok" if completeness == "complete" else ("partial" if completeness == "partial" else "error")
         parsed.meta.update(
             {
                 "mode": "transport",
                 "status": status,
-                "completeness": completeness,
-                "commands_ok": ok,
-                "commands_failed": failed,
+                "commands_ok": 1,
+                "commands_failed": 0,
                 "collector_version": self.collector_version,
-                "command": used_command,
-                "error_summary": "; ".join(errors) if errors else None,
+                "command": command,
+                "family": G08_FAMILY,
             }
         )
         return parsed
@@ -147,18 +127,31 @@ class IntelbrasG08Collector:
                     "completeness": "none",
                     "reason": "secrets_unavailable",
                     "collector_version": self.collector_version,
+                    "family": G08_FAMILY,
+                    "command": G08_MAC_TABLE_COMMAND,
                 }
             )
         transport = InteractiveCliTransport(secrets, timeout_sec=180)
         return self.collect_via_transport(transport)
 
+    def _failed(self, error: str, command: str) -> CollectorResult:
+        return CollectorResult(
+            meta={
+                "mode": "transport",
+                "status": "error",
+                "completeness": "none",
+                "commands_ok": 0,
+                "commands_failed": 1,
+                "collector_version": self.collector_version,
+                "command": command,
+                "family": G08_FAMILY,
+                "error_summary": error,
+            }
+        )
 
-def _looks_incomplete(text: str) -> bool:
-    low = text.lower()
-    return (
-        "ambiguous" in low
-        or "incomplete" in low
-        or "unknown command" in low
-        or "username or password error" in low
-        or "username(1-64" in low
-    )
+
+def _declared_total(text: str) -> Optional[int]:
+    m = _TOTAL.search(text or "")
+    if not m:
+        return None
+    return int(m.group(1))

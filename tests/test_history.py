@@ -386,3 +386,69 @@ def test_ingest_same_mac_two_onus_one_run(db: Session):
         )
     )
     assert {r.ont_id for r in rows} == {"0/1/14", "0/1/15"}
+
+
+def test_multiple_macs_behind_same_onu(db: Session):
+    t1, _, _, _, d1o, _ = seed_two_tenants(db)
+    mac_b = "11:22:33:44:55:66"
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(mac=MAC, ont_id="0/1/14", pon="0/1", vlan_id=30, source="olt"),
+                NormalizedOltMac(mac=mac_b, ont_id="0/1/14", pon="0/1", vlan_id=30, source="olt"),
+            ]
+        ),
+    )
+    db.commit()
+    rows = list(
+        db.scalars(
+            select(OltMacObservation).where(
+                OltMacObservation.ont_id == "0/1/14", OltMacObservation.tenant_id == t1.id
+            )
+        )
+    )
+    assert {r.mac for r in rows} == {MAC, mac_b}
+
+
+def test_repeated_dhcp_collection_updates_last_seen(db: Session):
+    t1, _, d1, _, _, _ = seed_two_tenants(db)
+    ingest = IngestService(db)
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(
+            dhcp=[NormalizedDhcpLease(mac=MAC, ip_address="10.30.1.50", observed_at=_ts(1))]
+        ),
+    )
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(
+            dhcp=[NormalizedDhcpLease(mac=MAC, ip_address="10.30.1.50", observed_at=_ts(2))]
+        ),
+    )
+    db.commit()
+    rows = list(db.scalars(select(DhcpLease).where(DhcpLease.mac == MAC, DhcpLease.tenant_id == t1.id)))
+    assert len(rows) == 1
+    assert rows[0].last_seen.replace(tzinfo=None) == _ts(2).replace(tzinfo=None)
+    assert rows[0].first_seen.replace(tzinfo=None) == _ts(1).replace(tzinfo=None)
+
+
+def test_finish_run_sanitizes_error_before_persist(db: Session):
+    t1, _, d1, _, _, _ = seed_two_tenants(db)
+    ingest = IngestService(db)
+    run = ingest.start_run(tenant_id=t1.id, collector_type="mikrotik_dhcp", device_id=d1.id)
+    ingest.finish_run(
+        run,
+        status="error",
+        error="password=super-secret host=192.0.2.8 user='labuser'",
+        completeness="none",
+    )
+    db.commit()
+    stored = db.get(type(run), run.id)
+    assert stored.error_summary is not None
+    assert "super-secret" not in stored.error_summary
+    assert "192.0.2.8" not in stored.error_summary
+    assert "labuser" not in stored.error_summary

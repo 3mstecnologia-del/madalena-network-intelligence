@@ -48,7 +48,7 @@ def main() -> int:
         aliases = _anonymize(sample_pool[:5])
         print(f"olt_macs={len(set(olt_macs))} dhcp_macs={len(set(dhcp_macs))} overlap={len(overlap)}")
         if overlap:
-            print("cross_source=YES")
+            print("cross_source=CORRELATED_SAMPLE")
         else:
             print("cross_source=NO_CORRELATED_SAMPLE")
         names = ("LAB-G08", "LAB-MK200")
@@ -85,12 +85,15 @@ def main() -> int:
         if api_mac.status_code == 200:
             body = api_mac.json()
             olt = body.get("olt_macs") or []
-            pon = (body.get("access_path") or {}).get("pon") or (olt[0].get("pon") if olt else None)
+            path = body.get("access_path") or {}
+            pon = path.get("pon") or (olt[0].get("pon") if olt else None)
+            vlan = path.get("vlan_id") if path.get("vlan_id") is not None else (olt[0].get("vlan_id") if olt else None)
             print(
                 f"SAMPLE {first_alias}: found=yes "
                 f"ip={bool(body.get('current_ips'))} "
-                f"onu={bool(olt)} "
+                f"onu={bool(path.get('onu') or olt)} "
                 f"pon={bool(pon)} "
+                f"vlan={vlan is not None} "
                 f"sources={body.get('sources')} "
                 f"conflicts={len(body.get('conflicts') or [])} "
                 f"first_seen={bool(body.get('first_seen'))} "
@@ -103,6 +106,19 @@ def main() -> int:
         mcp_find = client.post(f"{mcp}/tools/find_mac", json={"tenant": tenant, "mac": first_mac})
         mcp_hist = client.post(f"{mcp}/tools/get_mac_history", json={"tenant": tenant, "mac": first_mac})
         mcp_stat = client.post(f"{mcp}/tools/get_collection_status", json={"tenant": tenant, "limit": 10})
+        sample_ip = None
+        if api_mac.status_code == 200:
+            ips = (api_mac.json().get("current_ips") or [])
+            if ips:
+                sample_ip = ips[0].get("ip")
+        mcp_ip = None
+        if sample_ip:
+            mcp_ip = client.post(f"{mcp}/tools/find_ip", json={"tenant": tenant, "ip": sample_ip})
+            print(f"MCP find_ip {first_alias}: {mcp_ip.status_code}")
+            if mcp_ip.status_code != 200:
+                ok = False
+        else:
+            print(f"MCP find_ip {first_alias}: SKIP no_ip")
         mcp_ok = mcp_find.json().get("ok") if mcp_find.status_code == 200 else False
         print(f"MCP find_mac {first_alias}: {mcp_find.status_code} ok={mcp_ok}")
         print(f"MCP get_mac_history {first_alias}: {mcp_hist.status_code}")

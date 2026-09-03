@@ -18,7 +18,7 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models.entities import CollectionRun, Device, DeviceCredentialReference
 from app.services.ingest import IngestService
-from collectors.common.transport import sanitize_error
+from collectors.common.transport import sanitize_error, sanitized_exception_message
 from collectors.intelbras_g08.collector import IntelbrasG08Collector
 from collectors.mikrotik.collector import MikroTikCollector
 
@@ -62,13 +62,14 @@ def _finish_from_meta(ingest: IngestService, run, result, stats: Optional[dict])
         persist_status = "error"
     else:
         persist_status = status
+    raw_err = meta.get("error_summary") or meta.get("reason") or meta.get("todo")
     ingest.finish_run(
         run,
         status=persist_status,
         seen=(stats or {}).get("seen", 0),
         created=(stats or {}).get("created", 0),
         updated=(stats or {}).get("updated", 0),
-        error=meta.get("error_summary") or meta.get("reason") or meta.get("todo"),
+        error=sanitize_error(str(raw_err)) if raw_err else None,
         completeness=completeness,
         commands_ok=int(meta.get("commands_ok") or 0),
         commands_failed=int(meta.get("commands_failed") or 0),
@@ -156,11 +157,15 @@ def _run_by_type(device_type: str, lightweight: bool) -> None:
                             run,
                             status="error",
                             completeness="none",
-                            error=sanitize_error(str(exc)),
+                            error=sanitized_exception_message(exc),
                             collector_version=version,
                         )
                         db.commit()
-                    log.exception("collection failed device=%s — prior observations kept", device.name)
+                    log.error(
+                        "collection failed device=%s err=%s — prior observations kept",
+                        device.name,
+                        sanitized_exception_message(exc),
+                    )
             finally:
                 lock.release()
     finally:

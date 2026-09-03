@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Optional
 
 from app.core.ip import normalize_ip
@@ -43,6 +44,8 @@ def _iter_property_stanzas(text: str) -> Iterator[dict[str, str]]:
             done = flush()
             if done:
                 yield done
+        if re.match(r"^\d+\s+D\b", line):
+            stanza["dynamic"] = "yes"
         for part in line.split():
             if "=" in part:
                 k, _, v = part.partition("=")
@@ -65,31 +68,57 @@ def _safe_ip(value: str) -> Optional[str]:
         return None
 
 
-def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
-    results: list[NormalizedDhcpLease] = []
-    if "mac-address=" in text:
-        for stanza in _iter_property_stanzas(text):
-            if stanza.get("mac-address") and stanza.get("address"):
-                ip = _safe_ip(stanza["address"])
-                try:
-                    mac = normalize_mac(stanza["mac-address"])
-                except ValueError:
-                    continue
-                if ip is None:
-                    continue
-                results.append(
-                    NormalizedDhcpLease(
-                        mac=mac,
-                        ip_address=ip,
-                        hostname=_clean_opt(stanza.get("host-name")),
-                        server=_clean_opt(stanza.get("server")),
-                        status=_clean_opt(stanza.get("status")),
-                        comment=_clean_opt(stanza.get("comment")),
-                    )
-                )
-        if results:
-            return results
+@dataclass
+class DhcpParseReport:
+    leases: list[NormalizedDhcpLease]
+    entries_seen: int
+    parse_failures: int
 
+
+def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
+    return parse_dhcp_report(text).leases
+
+
+def parse_dhcp_report(text: str) -> DhcpParseReport:
+    """Parse RouterOS DHCP lease print. entries_seen counts lease-like records."""
+    if "mac-address=" in text or "address=" in text:
+        leases: list[NormalizedDhcpLease] = []
+        seen = 0
+        failed = 0
+        for stanza in _iter_property_stanzas(text):
+            if not stanza.get("mac-address") and not stanza.get("address"):
+                continue
+            seen += 1
+            ip = _safe_ip(stanza["address"]) if stanza.get("address") else None
+            try:
+                mac = normalize_mac(stanza["mac-address"]) if stanza.get("mac-address") else None
+            except ValueError:
+                mac = None
+            if ip is None or mac is None:
+                failed += 1
+                continue
+            kind = None
+            if stanza.get("dynamic") in {"yes", "true", "1"}:
+                kind = "dynamic"
+            elif stanza.get("dynamic") in {"no", "false", "0"}:
+                kind = "static"
+            leases.append(
+                NormalizedDhcpLease(
+                    mac=mac,
+                    ip_address=ip,
+                    hostname=_clean_opt(stanza.get("host-name")),
+                    server=_clean_opt(stanza.get("server")),
+                    status=_clean_opt(stanza.get("status")),
+                    comment=_clean_opt(stanza.get("comment")),
+                    lease_kind=kind,
+                    client_id=_clean_opt(stanza.get("client-id")),
+                    reported_last_seen=_clean_opt(stanza.get("last-seen")),
+                )
+            )
+        if seen:
+            return DhcpParseReport(leases=leases, entries_seen=seen, parse_failures=failed)
+
+    results: list[NormalizedDhcpLease] = []
     lease_re = re.compile(
         r"(?P<ip>\d+\.\d+\.\d+\.\d+)\s+"
         r"(?P<mac>[0-9A-Fa-f:\-\.]+)\s+"
@@ -98,6 +127,7 @@ def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
         r"(?P<status>bound|waiting|busy|auth-failed|offered)?",
         re.IGNORECASE,
     )
+    seen = failed = 0
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -108,20 +138,23 @@ def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
         m = lease_re.search(cleaned) or lease_re.search(line)
         if not m:
             continue
+        seen += 1
         try:
             mac = normalize_mac(m.group("mac"))
+            ip = normalize_ip(m.group("ip"))
         except ValueError:
+            failed += 1
             continue
         results.append(
             NormalizedDhcpLease(
                 mac=mac,
-                ip_address=normalize_ip(m.group("ip")),
+                ip_address=ip,
                 hostname=_clean_opt(m.group("host")),
                 server=_clean_opt(m.group("server")),
                 status=_clean_opt(m.group("status")),
             )
         )
-    return results
+    return DhcpParseReport(leases=results, entries_seen=seen, parse_failures=failed)
 
 
 def parse_arp(text: str) -> list[NormalizedArp]:

@@ -17,7 +17,7 @@ from app.core.db import SessionLocal
 from app.models.entities import CollectionRun, Device, DeviceCredentialReference, Site, Tenant
 from app.services.ingest import IngestService
 from collectors.common.envfile import apply_mapped_env, read_env_file_keys
-from collectors.common.transport import sanitize_error
+from collectors.common.transport import sanitize_error, sanitized_exception_message
 from collectors.intelbras_g08.collector import IntelbrasG08Collector
 from collectors.mikrotik.collector import MikroTikCollector
 from scheduler.main import _finish_from_meta
@@ -116,6 +116,13 @@ def _run_device(db, tenant, device, collect_fn, collector_type: str, version: st
     db.commit()
     try:
         result = collect_fn()
+        diag = (result.meta or {}).get("ssh_diag")
+        if diag:
+            print(
+                f"{device.name} ssh tcp={diag.get('tcp')} banner={diag.get('banner')} "
+                f"handshake={diag.get('handshake')} auth={diag.get('authentication')} "
+                f"command={diag.get('command')} port={diag.get('port_configured')}"
+            )
         stats = None
         status = (result.meta or {}).get("status", "ok")
         if status not in {"skipped", "not_implemented"}:
@@ -135,16 +142,17 @@ def _run_device(db, tenant, device, collect_fn, collector_type: str, version: st
                 run,
                 status="error",
                 completeness="none",
-                error=sanitize_error(str(exc)),
+                error=sanitized_exception_message(exc),
                 collector_version=version,
             )
             db.commit()
-        print(f"{device.name}: FAIL status=error err={sanitize_error(str(exc))}")
+        print(f"{device.name}: FAIL status=error err={sanitized_exception_message(exc)}")
         return {"status": "error", "seen": 0}
     print(
         f"{device.name}: status={run.status} completeness={run.completeness} "
         f"seen={run.records_seen} created={run.records_created} updated={run.records_updated} "
-        f"commands_ok={run.commands_ok} commands_failed={run.commands_failed}"
+        f"commands_ok={run.commands_ok} commands_failed={run.commands_failed} "
+        f"parse_failures={(result.meta or {}).get('parse_failures', 0)}"
     )
     return {
         "status": run.status,
@@ -174,6 +182,14 @@ def main() -> None:
     try:
         _resanitize_stored_errors(db)
         tenant, olt, mk = _ensure_inventory(db)
+        from collectors.common.secrets import resolve_secrets
+
+        mk_secrets = resolve_secrets("env", MK_PREFIX)
+        olt_secrets = resolve_secrets("env", OLT_PREFIX)
+        if olt_secrets:
+            print(f"olt configured_protocol={olt_secrets.protocol} configured_port={olt_secrets.port}")
+        if mk_secrets:
+            print(f"mk configured_protocol={mk_secrets.protocol} configured_port={mk_secrets.port}")
         print(f"tenant={tenant.slug}")
         _run_device(
             db,

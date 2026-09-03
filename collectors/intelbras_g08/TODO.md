@@ -2,19 +2,22 @@
 
 Skill reference (do not duplicate): `hermes-3ms-skills/.../olt-intelbras-g08-ops/`
 
-## Documented read commands
+## Driver contract (validated live)
 
-- `show ont mac-address` (lab-authorized primary)
-- `show ont mac-address-table interface gpon all` (skill form, fallback only)
+Family `intelbras-g08` collects MAC observations with:
+
+`show ont mac-address-table interface gpon all`
+
+Live evidence (no private payload): the short form `show ont mac-address` returns `% Incomplete command`. The collector does not probe the incomplete form.
+
+Parsed columns when present: MAC-Address, VID (VLAN observation), ONT-ID, SN (ONU serial, not ONT-ID), ID/GEM, PON derived from ONT-ID.
+
+## Other documented read commands (not in the live MAC driver)
+
 - `show ont brief interface gpon all`
 - `show ont-find list interface gpon all`
-
-## Live
-
-Interactive CLI transport is read-only and allowlisted. Identity/paging CLI extras are not invented.
 
 ## Open items
 
 1. Confirm optional identity command on live G08 without guessing.
-2. VLAN completeness when the MAC table omits VLAN.
-3. Profile correlation from `show ont profile` when authorized.
+2. Profile correlation from `show ont profile` when authorized.

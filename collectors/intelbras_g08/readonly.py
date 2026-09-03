@@ -1,20 +1,18 @@
 """Read-only Intelbras G08 command allowlist.
 
-Only documented show/read commands. Never add/set/remove/enable/disable/move,
-never configure terminal, never reboot/reset/backup/export.
+Live G08 evidence: `show ont mac-address` is incomplete on this family.
+The collector contract is the skill-documented table command.
 """
 
+G08_FAMILY = "intelbras-g08"
+G08_MAC_TABLE_COMMAND = "show ont mac-address-table interface gpon all"
+
 G08_READ_ALLOWLIST: tuple[str, ...] = (
-    "show ont mac-address",
     "show ont mac-address-table",
 )
 
-# Lab collection: the authorized primary command.
 G08_MAC_COMMANDS: tuple[tuple[str, str], ...] = (
-    ("mac_table", "show ont mac-address"),
+    ("mac_table", G08_MAC_TABLE_COMMAND),
 )
 
-# Skill-documented form — used only if the primary command is incomplete.
-G08_MAC_COMMAND_FALLBACK = "show ont mac-address-table interface gpon all"
-
-COLLECTOR_VERSION = "0.2.0"
+COLLECTOR_VERSION = "0.3.0"

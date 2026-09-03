@@ -272,6 +272,9 @@ class IngestService:
                     server=lease.server,
                     status=lease.status,
                     comment=lease.comment,
+                    lease_kind=getattr(lease, "lease_kind", None),
+                    client_id=getattr(lease, "client_id", None),
+                    reported_last_seen=getattr(lease, "reported_last_seen", None),
                     first_seen=lease.observed_at,
                     last_seen=lease.observed_at,
                     observed_at=lease.observed_at,
@@ -284,6 +287,12 @@ class IngestService:
         row.server = lease.server or row.server
         row.status = lease.status or row.status
         row.comment = lease.comment or row.comment
+        if getattr(lease, "lease_kind", None):
+            row.lease_kind = lease.lease_kind
+        if getattr(lease, "client_id", None):
+            row.client_id = lease.client_id
+        if getattr(lease, "reported_last_seen", None):
+            row.reported_last_seen = lease.reported_last_seen
         row.last_seen = lease.observed_at
         row.observed_at = lease.observed_at
         row.collection_run_id = run_id

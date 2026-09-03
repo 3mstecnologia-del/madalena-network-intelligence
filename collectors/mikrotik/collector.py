@@ -21,6 +21,7 @@ from collectors.mikrotik.parsers import (
     parse_arp,
     parse_bridge_fdb,
     parse_dhcp_leases,
+    parse_dhcp_report,
     parse_identity,
     parse_interfaces,
     parse_neighbors,
@@ -99,6 +100,7 @@ class MikroTikCollector:
                 continue
             texts[key] = result.stdout
             ok += 1
+        dhcp_report = parse_dhcp_report(texts.get("dhcp", ""))
         parsed = self.collect_from_texts(
             dhcp_text=texts.get("dhcp", ""),
             arp_text=texts.get("arp", ""),
@@ -107,13 +109,18 @@ class MikroTikCollector:
             interfaces_text=texts.get("interfaces", ""),
             neighbors_text=texts.get("neighbors", ""),
         )
-        if failed == 0:
+        parsed.dhcp = dhcp_report.leases
+        parse_failures = dhcp_report.parse_failures if dhcp_only or texts.get("dhcp") else 0
+        if failed == 0 and parse_failures == 0:
             completeness = "complete"
             status = "ok"
         elif ok == 0:
             completeness = "none"
             status = "error"
         else:
+            completeness = "partial"
+            status = "partial"
+        if failed == 0 and parse_failures:
             completeness = "partial"
             status = "partial"
         parsed.meta.update(
@@ -123,6 +130,8 @@ class MikroTikCollector:
                 "completeness": completeness,
                 "commands_ok": ok,
                 "commands_failed": failed,
+                "parse_failures": parse_failures,
+                "dhcp_entries_seen": dhcp_report.entries_seen,
                 "collector_version": self.collector_version,
                 "error_summary": "; ".join(errors) if errors else None,
             }
@@ -146,22 +155,16 @@ class MikroTikCollector:
                 }
             )
         proto = (secrets.protocol or "ssh").lower()
-        from dataclasses import replace
-
-        from collectors.common.cli_interactive import InteractiveCliTransport
-        from collectors.mikrotik.transport_api import RouterOsApiTransport
-
-        attempts: list[Transport] = []
-        if proto in {"api", "routeros-api"}:
-            attempts.append(RouterOsApiTransport(secrets))
+        if proto in {"ssh", "ssh2"}:
+            transport = SshTransport(secrets, timeout_sec=60)
         elif proto in {"telnet", "telnet23"}:
-            attempts.append(InteractiveCliTransport(secrets))
-            attempts.append(RouterOsApiTransport(secrets))
-        elif proto in {"ssh", "ssh2"}:
-            attempts.append(SshTransport(secrets, timeout_sec=60))
-            attempts.append(InteractiveCliTransport(secrets, timeout_sec=90))
-            attempts.append(InteractiveCliTransport(replace(secrets, protocol="telnet"), timeout_sec=90))
-            attempts.append(RouterOsApiTransport(secrets))
+            from collectors.common.cli_interactive import InteractiveCliTransport
+
+            transport = InteractiveCliTransport(secrets, timeout_sec=90)
+        elif proto in {"api", "routeros-api"}:
+            from collectors.mikrotik.transport_api import RouterOsApiTransport
+
+            transport = RouterOsApiTransport(secrets)
         else:
             return CollectorResult(
                 meta={
@@ -172,11 +175,9 @@ class MikroTikCollector:
                     "collector_version": self.collector_version,
                 }
             )
-        last = None
-        for transport in attempts:
-            last = self.collect_via_transport(
-                transport, lightweight=lightweight, dhcp_only=dhcp_only
-            )
-            if last.meta.get("status") != "error":
-                return last
-        return last
+        result = self.collect_via_transport(transport, lightweight=lightweight, dhcp_only=dhcp_only)
+        if isinstance(transport, SshTransport):
+            result.meta["ssh_diag"] = {
+                k: v for k, v in transport.last_diag.items() if k != "host"
+            }
+        return result

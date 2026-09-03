@@ -1,8 +1,8 @@
 """Parsers for Intelbras G08 CLI outputs.
 
 Commands referenced from hermes skill olt-intelbras-g08-ops (operational knowledge).
-Does not invent CLI. Live `show ont mac-address` layout is accepted when fields
-are explicit on the line — missing VLAN/GEM are left None.
+Does not invent CLI. Live collection uses `show ont mac-address-table interface gpon all`.
+The short form `show ont mac-address` is incomplete on the validated G08 family.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ _ONT_BRIEF = re.compile(
 
 
 def parse_ont_mac_address(
-    text: str, *, command: str = "show ont mac-address", source: str = "olt"
+    text: str, *, command: str = "show ont mac-address-table interface gpon all", source: str = "olt"
 ) -> list[NormalizedOltMac]:
     """Parse `show ont mac-address` / mac-address-table style tables."""
     results: list[NormalizedOltMac] = []

@@ -37,4 +37,4 @@ MIKROTIK_FULL_COMMANDS: tuple[tuple[str, str], ...] = MIKROTIK_LIGHT_COMMANDS + 
     ("neighbors", "/ip neighbor print detail"),
 )
 
-COLLECTOR_VERSION = "0.2.0"
+COLLECTOR_VERSION = "0.3.0"
