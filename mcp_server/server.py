@@ -7,7 +7,6 @@ Tenant is always required — no implicit cross-tenant access.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 from uuid import UUID
 
@@ -21,7 +20,7 @@ from app.core.db import SessionLocal
 from app.core.mac import normalize_mac
 from app.services.query import QueryService
 
-app = FastAPI(title="Madalena NI MCP Tools", version="0.1.0")
+app = FastAPI(title="Madalena NI MCP Tools", version="0.2.0")
 
 
 class ToolRequest(BaseModel):
@@ -64,6 +63,13 @@ def _concise_mac(corr) -> str:
         lines.append(f"hostname: {corr.hostname}")
     if corr.current_ips:
         lines.append("IPs: " + ", ".join(i["ip"] for i in corr.current_ips))
+    if corr.current_locations:
+        loc = corr.current_locations[0]
+        lines.append(
+            f"location: {loc.get('device')} iface={loc.get('interface')} source={loc.get('source')}"
+        )
+    if corr.conflicts:
+        lines.append("conflicts: " + ", ".join(c.get("kind", "?") for c in corr.conflicts))
     if corr.dhcp:
         d = corr.dhcp[0]
         lines.append(f"DHCP: {d.get('ip')} via {d.get('device')} server={d.get('server')}")
@@ -96,7 +102,9 @@ def find_mac(body: ToolRequest) -> dict[str, Any]:
             corr = qs.find_mac(body.tenant, mac)
         except LookupError as exc:
             raise HTTPException(404, str(exc)) from exc
-        if corr is None or not any([corr.dhcp, corr.arp, corr.fdb, corr.olt_macs, corr.first_seen]):
+        if corr is None or not any(
+            [corr.dhcp, corr.arp, corr.fdb, corr.olt_macs, corr.neighbors, corr.first_seen]
+        ):
             return {"ok": False, "text": f"MAC {mac} not found in tenant {body.tenant}"}
         return {"ok": True, "text": _concise_mac(corr), "data": corr.to_dict()}
     finally:
@@ -209,16 +217,21 @@ def get_mac_history(body: ToolRequest) -> dict[str, Any]:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        text = json.dumps(
-            {
-                "mac": data.get("mac"),
-                "found": data.get("found"),
-                "current_ips": data.get("current_ips"),
-                "ip_changes": data.get("ip_changes"),
-                "access_path": data.get("access_path"),
-            },
-            ensure_ascii=False,
-        )
+        timeline = data.get("timeline") or []
+        summary_lines = [
+            f"MAC {data.get('mac')} tenant={data.get('tenant')} found={data.get('found')}",
+            f"first_seen={data.get('first_seen')} last_seen={data.get('last_seen')}",
+            f"current_ips={data.get('current_ips')}",
+            f"current_locations={data.get('current_locations')}",
+            f"conflicts={data.get('conflicts')}",
+            f"timeline_events={len(timeline)}",
+        ]
+        for event in timeline[:20]:
+            summary_lines.append(
+                f"{event.get('at')} {event.get('kind')} device={event.get('device')} "
+                f"iface={event.get('interface')} ip={event.get('ip')} source={event.get('source')}"
+            )
+        text = "\n".join(summary_lines)
         return {"ok": bool(data.get("found")), "text": text, "data": data}
     finally:
         db.close()
@@ -230,27 +243,18 @@ def get_collection_status(body: ToolRequest) -> dict[str, Any]:
     try:
         qs = QueryService(db)
         try:
-            runs = qs.collection_runs(body.tenant, limit=body.limit)
+            status = qs.collection_status(body.tenant, limit=body.limit)
         except LookupError as exc:
             raise HTTPException(404, str(exc)) from exc
         lines = [
-            f"{r.collector_type} {r.status} seen={r.records_seen} "
-            f"started={r.started_at.isoformat() if r.started_at else None}"
-            for r in runs
+            f"{r['collector_type']} {r['status']} completeness={r['completeness']} "
+            f"seen={r['records_seen']} freshness_s={r['freshness_seconds']}"
+            for r in status.get("runs", [])
         ]
         return {
             "ok": True,
             "text": "\n".join(lines) or "no runs",
-            "data": [
-                {
-                    "id": str(r.id),
-                    "collector_type": r.collector_type,
-                    "status": r.status,
-                    "records_seen": r.records_seen,
-                    "error_summary": r.error_summary,
-                }
-                for r in runs
-            ],
+            "data": status,
         }
     finally:
         db.close()
