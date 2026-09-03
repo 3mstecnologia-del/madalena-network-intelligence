@@ -266,8 +266,10 @@ class CorrelationEngine:
                     "vlan_id": row.vlan_id,
                     "device": device_name,
                     "device_id": str(row.device_id),
+                    "first_seen": _iso(row.first_seen),
                     "last_seen": _iso(row.last_seen),
                     "source": row.source,
+                    "command": getattr(row, "command", None),
                 }
             )
             timeline.append(
@@ -280,6 +282,7 @@ class CorrelationEngine:
                     "ip": None,
                     "ont_id": row.ont_id,
                     "source": row.source,
+                    "command": getattr(row, "command", None),
                     "first_seen": _iso(row.first_seen),
                     "last_seen": _iso(row.last_seen),
                     "collection_run_id": str(row.collection_run_id) if row.collection_run_id else None,
@@ -345,6 +348,22 @@ class CorrelationEngine:
             location_events, key=lambda loc: (loc.get("device"), loc.get("interface"))
         )
         conflicts = _detect_conflicts(current_ips, current_locations)
+        if olt_rows:
+            max_olt = max(row.last_seen for row in olt_rows)
+            current_onts = sorted(
+                {row.ont_id for row in olt_rows if row.last_seen == max_olt and row.ont_id}
+            )
+            if len(current_onts) > 1:
+                conflicts.append(
+                    {
+                        "kind": "ambiguous_onu",
+                        "message": (
+                            "Multiple ONUs observed this MAC at the latest timestamp; "
+                            "not choosing one."
+                        ),
+                        "values": current_onts,
+                    }
+                )
 
         timeline.sort(key=lambda e: e.get("at") or "", reverse=True)
 

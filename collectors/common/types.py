@@ -58,8 +58,10 @@ class NormalizedOltMac:
     pon: Optional[str] = None
     vlan_id: Optional[int] = None
     gem: Optional[str] = None
+    serial: Optional[str] = None
     observed_at: datetime = field(default_factory=utcnow)
-    source: str = "intelbras_g08_mac"
+    source: str = "olt"
+    command: Optional[str] = None
 
 
 @dataclass

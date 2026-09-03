@@ -7,13 +7,20 @@ from dataclasses import dataclass
 from typing import Optional, Protocol
 
 _SECRETISH = re.compile(
-    r"(?i)(password|passwd|secret|token|community|private-key)\s*[=:]\s*\S+"
+    r"(?i)(password|passwd|secret|token|community|private-key|username|user|login)\s*[=:]\s*\S+"
 )
+_IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+_MAC = re.compile(r"(?i)(?:[0-9A-F]{2}[:\-]){5}[0-9A-F]{2}")
+_SQL_PARAMS = re.compile(r"\[SQL:.*", re.DOTALL)
 
 
 def sanitize_error(message: str) -> str:
-    """Strip secret-like key=value pairs from error text before persistence."""
-    return _SECRETISH.sub(r"\1=<REDACTED>", message)[:1000]
+    """Strip secret-like pairs, addresses, and SQL parameter blobs before persistence."""
+    text = _SECRETISH.sub(r"\1=<REDACTED>", message)
+    text = _IPV4.sub("<IP>", text)
+    text = _MAC.sub("<MAC>", text)
+    text = _SQL_PARAMS.sub("[SQL redacted]", text)
+    return text[:500]
 
 
 @dataclass

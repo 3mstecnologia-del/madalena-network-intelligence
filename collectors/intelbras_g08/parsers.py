@@ -1,7 +1,8 @@
 """Parsers for Intelbras G08 CLI outputs.
 
 Commands referenced from hermes skill olt-intelbras-g08-ops (operational knowledge).
-This collector does NOT invent CLI — only parse fixtures / validated formats.
+Does not invent CLI. Live `show ont mac-address` layout is accepted when fields
+are explicit on the line — missing VLAN/GEM are left None.
 """
 
 from __future__ import annotations
@@ -12,8 +13,33 @@ from typing import Optional
 from app.core.mac import normalize_mac
 from collectors.common.types import NormalizedOltMac, NormalizedOnu
 
-# Fixture-oriented table: ONT_ID  PON  MAC  VLAN  GEM
-# Example validated skill command: show ont mac-address-table interface gpon all
+_MAC_TOKEN = re.compile(
+    r"(?P<mac>"
+    r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}|"
+    r"[0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5}|"
+    r"[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}|"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}|"
+    r"[0-9A-Fa-f]{12}"
+    r")"
+)
+_ONT_ID = re.compile(r"\b(\d+/\d+/\d+)\b")
+_PON = re.compile(r"(?i)\b(?:gpon\s+)?(\d+/\d+)\b")
+_VLAN_LABELED = re.compile(r"(?i)\bvlan(?:-?id)?\s*[:=]?\s*(\d{1,4})\b")
+_GEM_LABELED = re.compile(r"(?i)\bgem(?:port)?\s*[:=]?\s*(\d+)\b")
+
+# Live G08: MAC-Address  VID  ONT-ID  SN  ID/GEM
+_MAC_VID_ONT = re.compile(
+    r"(?P<mac>"
+    r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}|"
+    r"[0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5}|"
+    r"[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}|"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"
+    r")\s+"
+    r"(?P<vid>\d{1,4})\s+"
+    r"(?P<ont>\d+/\d+/\d+)\s+"
+    r"(?P<sn>\S+)"
+    r"(?:\s+(?P<gem>\S+))?",
+)
 _MAC_ROW = re.compile(
     r"(?P<ont>\d+/\d+/\d+)\s+"
     r"(?:gpon\s*)?(?P<pon>\d+/\d+)?\s*"
@@ -23,13 +49,6 @@ _MAC_ROW = re.compile(
     re.IGNORECASE,
 )
 
-_MAC_SIMPLE = re.compile(
-    r"(?P<mac>[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}|[0-9A-Fa-f]{12})"
-    r".*?(?:ont[-\s]?(?:id)?[=:\s]+)(?P<ont>\d+/\d+/\d+)",
-    re.IGNORECASE,
-)
-
-# Brief ONT line: 0/1/14  SERIAL  online  PROFILE
 _ONT_BRIEF = re.compile(
     r"(?P<ont>\d+/\d+/\d+)\s+"
     r"(?P<serial>[A-Za-z0-9]+)\s+"
@@ -39,58 +58,116 @@ _ONT_BRIEF = re.compile(
 )
 
 
-def parse_ont_mac_address_table(text: str) -> list[NormalizedOltMac]:
-    """Parse output of: show ont mac-address-table interface gpon all
-
-    TODO: validate exact column layout against live G08 once lab access is authorized.
-    Current parser accepts a documented fixture format for CI.
-    """
+def parse_ont_mac_address(
+    text: str, *, command: str = "show ont mac-address", source: str = "olt"
+) -> list[NormalizedOltMac]:
+    """Parse `show ont mac-address` / mac-address-table style tables."""
     results: list[NormalizedOltMac] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "MAC" in line.upper() and "ONT" in line.upper():
+    seen: set[tuple[str, Optional[str]]] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
             continue
-        m = _MAC_ROW.search(line)
-        if m:
-            try:
-                mac = normalize_mac(m.group("mac"))
-            except ValueError:
-                continue
-            pon = m.group("pon")
-            ont = m.group("ont")
-            if not pon and ont:
-                parts = ont.split("/")
-                if len(parts) >= 2:
-                    pon = f"{parts[0]}/{parts[1]}"
-            vlan = m.group("vlan")
-            results.append(
-                NormalizedOltMac(
-                    mac=mac,
-                    ont_id=ont,
-                    pon=pon,
-                    vlan_id=int(vlan) if vlan else None,
-                    gem=m.group("gem"),
-                )
-            )
+        upper = line.upper()
+        if "MAC" in upper and ("ONT" in upper or "ADDRESS" in upper) and not _MAC_TOKEN.search(line):
             continue
-        m2 = _MAC_SIMPLE.search(line)
-        if m2:
-            try:
-                mac = normalize_mac(m2.group("mac"))
-            except ValueError:
-                continue
-            ont = m2.group("ont")
-            parts = ont.split("/")
-            pon = f"{parts[0]}/{parts[1]}" if len(parts) >= 2 else None
-            results.append(NormalizedOltMac(mac=mac, ont_id=ont, pon=pon))
+        if set(line) <= set("-_= "):
+            continue
+        row = _parse_mac_line(line, command=command, source=source)
+        if row is None:
+            continue
+        key = (row.mac, row.ont_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(row)
     return results
 
 
-def parse_ont_brief(text: str) -> list[NormalizedOnu]:
-    """Parse output of: show ont brief interface gpon all
+def parse_ont_mac_address_table(text: str) -> list[NormalizedOltMac]:
+    """Backward-compatible name used by fixtures and collect_from_texts."""
+    return parse_ont_mac_address(
+        text, command="show ont mac-address-table interface gpon all", source="olt"
+    )
 
-    TODO: confirm exact columns on live equipment; fixture-driven for Phase 1.
-    """
+
+def _parse_mac_line(line: str, *, command: str, source: str) -> Optional[NormalizedOltMac]:
+    mac_m = _MAC_TOKEN.search(line)
+    if not mac_m:
+        return None
+    try:
+        mac = normalize_mac(mac_m.group("mac"))
+    except ValueError:
+        return None
+
+    ont = None
+    pon = None
+    vlan = None
+    gem = None
+    serial = None
+
+    vid_row = _MAC_VID_ONT.search(line)
+    if vid_row:
+        try:
+            mac = normalize_mac(vid_row.group("mac"))
+        except ValueError:
+            vid_row = None
+        else:
+            ont = vid_row.group("ont")
+            vlan = int(vid_row.group("vid"))
+            serial = _opt(vid_row.group("sn"))
+            gem = vid_row.group("gem")
+
+    if ont is None:
+        row = _MAC_ROW.search(line)
+        if row:
+            try:
+                mac = normalize_mac(row.group("mac"))
+            except ValueError:
+                pass
+            else:
+                ont = row.group("ont")
+                pon = row.group("pon")
+                if row.group("vlan"):
+                    vlan = int(row.group("vlan"))
+                gem = row.group("gem")
+
+    if ont is None:
+        ont_m = _ONT_ID.search(line)
+        if ont_m:
+            ont = ont_m.group(1)
+
+    if pon is None:
+        if ont:
+            parts = ont.split("/")
+            if len(parts) >= 2:
+                pon = f"{parts[0]}/{parts[1]}"
+        else:
+            pon_m = _PON.search(line)
+            if pon_m:
+                pon = pon_m.group(1)
+
+    labeled_vlan = _VLAN_LABELED.search(line)
+    if labeled_vlan:
+        vlan = int(labeled_vlan.group(1))
+    labeled_gem = _GEM_LABELED.search(line)
+    if labeled_gem:
+        gem = labeled_gem.group(1)
+
+    return NormalizedOltMac(
+        mac=mac,
+        ont_id=ont,
+        pon=pon,
+        vlan_id=vlan,
+        gem=gem,
+        serial=serial,
+        source=source,
+        command=command,
+    )
+
+
+def parse_ont_brief(text: str) -> list[NormalizedOnu]:
+    """Parse output of: show ont brief interface gpon all"""
     results: list[NormalizedOnu] = []
     for line in text.splitlines():
         line = line.strip()
@@ -112,6 +189,21 @@ def parse_ont_brief(text: str) -> list[NormalizedOnu]:
             )
         )
     return results
+
+
+def onus_from_macs(macs: list[NormalizedOltMac]) -> list[NormalizedOnu]:
+    """Minimal ONU rows implied by MAC observations. No invented serial/status."""
+    seen: dict[str, NormalizedOnu] = {}
+    for row in macs:
+        if not row.ont_id:
+            continue
+        if row.ont_id not in seen:
+            seen[row.ont_id] = NormalizedOnu(
+                ont_id=row.ont_id, pon=row.pon, serial=getattr(row, "serial", None)
+            )
+        elif getattr(row, "serial", None) and not seen[row.ont_id].serial:
+            seen[row.ont_id].serial = row.serial
+    return list(seen.values())
 
 
 def _opt(v: Optional[str]) -> Optional[str]:

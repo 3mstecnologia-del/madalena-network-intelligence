@@ -27,6 +27,7 @@ from collectors.mikrotik.parsers import (
 )
 from collectors.mikrotik.readonly import (
     COLLECTOR_VERSION,
+    MIKROTIK_DHCP_COMMANDS,
     MIKROTIK_FULL_COMMANDS,
     MIKROTIK_LIGHT_COMMANDS,
     MIKROTIK_READ_ALLOWLIST,
@@ -70,9 +71,14 @@ class MikroTikCollector:
             },
         )
 
-    def collect_via_transport(self, transport: Transport, *, lightweight: bool = True) -> CollectorResult:
+    def collect_via_transport(
+        self, transport: Transport, *, lightweight: bool = True, dhcp_only: bool = False
+    ) -> CollectorResult:
         guarded = ReadOnlyTransport(transport, MIKROTIK_READ_ALLOWLIST)
-        steps = MIKROTIK_LIGHT_COMMANDS if lightweight else MIKROTIK_FULL_COMMANDS
+        if dhcp_only:
+            steps = MIKROTIK_DHCP_COMMANDS
+        else:
+            steps = MIKROTIK_LIGHT_COMMANDS if lightweight else MIKROTIK_FULL_COMMANDS
         texts: dict[str, str] = {}
         errors: list[str] = []
         ok = failed = 0
@@ -123,9 +129,11 @@ class MikroTikCollector:
         )
         return parsed
 
-    def collect_live(self, *, lightweight: bool = True) -> CollectorResult:
+    def collect_live(self, *, lightweight: bool = True, dhcp_only: bool = False) -> CollectorResult:
         if self._transport is not None:
-            return self.collect_via_transport(self._transport, lightweight=lightweight)
+            return self.collect_via_transport(
+                self._transport, lightweight=lightweight, dhcp_only=dhcp_only
+            )
         secrets = resolve_secrets(self.secret_provider, self.secret_prefix)
         if secrets is None:
             return CollectorResult(
@@ -137,5 +145,38 @@ class MikroTikCollector:
                     "collector_version": self.collector_version,
                 }
             )
-        transport = SshTransport(secrets)
-        return self.collect_via_transport(transport, lightweight=lightweight)
+        proto = (secrets.protocol or "ssh").lower()
+        from dataclasses import replace
+
+        from collectors.common.cli_interactive import InteractiveCliTransport
+        from collectors.mikrotik.transport_api import RouterOsApiTransport
+
+        attempts: list[Transport] = []
+        if proto in {"api", "routeros-api"}:
+            attempts.append(RouterOsApiTransport(secrets))
+        elif proto in {"telnet", "telnet23"}:
+            attempts.append(InteractiveCliTransport(secrets))
+            attempts.append(RouterOsApiTransport(secrets))
+        elif proto in {"ssh", "ssh2"}:
+            attempts.append(SshTransport(secrets, timeout_sec=60))
+            attempts.append(InteractiveCliTransport(secrets, timeout_sec=90))
+            attempts.append(InteractiveCliTransport(replace(secrets, protocol="telnet"), timeout_sec=90))
+            attempts.append(RouterOsApiTransport(secrets))
+        else:
+            return CollectorResult(
+                meta={
+                    "mode": "live",
+                    "status": "error",
+                    "completeness": "none",
+                    "reason": "unsupported_mikrotik_protocol",
+                    "collector_version": self.collector_version,
+                }
+            )
+        last = None
+        for transport in attempts:
+            last = self.collect_via_transport(
+                transport, lightweight=lightweight, dhcp_only=dhcp_only
+            )
+            if last.meta.get("status") != "error":
+                return last
+        return last

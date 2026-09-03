@@ -8,13 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.correlation.engine import CorrelationEngine
-from app.models.entities import ArpObservation, CollectionRun, DhcpLease, MacObservation
+from app.models.entities import ArpObservation, CollectionRun, DhcpLease, MacObservation, OltMacObservation
 from app.services.ingest import IngestService
 from collectors.common.types import (
     CollectorResult,
     NormalizedArp,
     NormalizedDhcpLease,
     NormalizedMacFdb,
+    NormalizedOltMac,
 )
 from collectors.mikrotik.collector import MikroTikCollector
 from tests.conftest import FIX, seed_two_tenants
@@ -303,3 +304,85 @@ def test_arp_interface_change_keeps_prior_row(db: Session):
         db.scalars(select(ArpObservation).where(ArpObservation.mac == MAC, ArpObservation.tenant_id == t1.id))
     )
     assert {r.interface for r in rows} == {"vlan30", "vlan40"}
+
+
+def test_olt_mac_move_keeps_prior_onu(db: Session):
+    t1, _, _, _, d1o, _ = seed_two_tenants(db)
+    ingest = IngestService(db)
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(
+                    mac=MAC, ont_id="0/1/14", pon="0/1", source="olt", observed_at=_ts(1)
+                )
+            ]
+        ),
+    )
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(
+                    mac=MAC, ont_id="0/1/15", pon="0/1", source="olt", observed_at=_ts(3)
+                )
+            ]
+        ),
+    )
+    db.commit()
+    rows = list(
+        db.scalars(
+            select(OltMacObservation).where(
+                OltMacObservation.mac == MAC, OltMacObservation.tenant_id == t1.id
+            )
+        )
+    )
+    assert {r.ont_id for r in rows} == {"0/1/14", "0/1/15"}
+    corr = CorrelationEngine(db).correlate_mac("example-tenant", MAC)
+    assert corr.access_path is not None
+    assert corr.access_path.onu == "0/1/15"
+    assert {row["ont_id"] for row in corr.olt_macs} == {"0/1/14", "0/1/15"}
+
+
+def test_olt_mac_same_timestamp_two_onus_is_conflict(db: Session):
+    t1, _, _, _, d1o, _ = seed_two_tenants(db)
+    same = _ts(4)
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(mac=MAC, ont_id="0/1/14", pon="0/1", source="olt", observed_at=same),
+                NormalizedOltMac(mac=MAC, ont_id="0/1/15", pon="0/1", source="olt", observed_at=same),
+            ]
+        ),
+    )
+    db.commit()
+    corr = CorrelationEngine(db).correlate_mac("example-tenant", MAC)
+    kinds = {c["kind"] for c in corr.conflicts}
+    assert "ambiguous_onu" in kinds
+
+
+def test_ingest_same_mac_two_onus_one_run(db: Session):
+    t1, _, _, _, d1o, _ = seed_two_tenants(db)
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(mac=MAC, ont_id="0/1/14", pon="0/1", source="olt", observed_at=_ts(1)),
+                NormalizedOltMac(mac=MAC, ont_id="0/1/15", pon="0/1", source="olt", observed_at=_ts(1)),
+            ]
+        ),
+    )
+    db.commit()
+    rows = list(
+        db.scalars(
+            select(OltMacObservation).where(
+                OltMacObservation.mac == MAC, OltMacObservation.tenant_id == t1.id
+            )
+        )
+    )
+    assert {r.ont_id for r in rows} == {"0/1/14", "0/1/15"}

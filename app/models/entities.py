@@ -271,6 +271,10 @@ class OltOnu(Base):
 
 class OltMacObservation(Base):
     __tablename__ = "olt_mac_observations"
+    __table_args__ = (
+        Index("ix_olt_mac_tenant_mac", "tenant_id", "mac"),
+        Index("ix_olt_mac_tenant_ont", "tenant_id", "ont_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
@@ -283,7 +287,8 @@ class OltMacObservation(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    source: Mapped[str] = mapped_column(String(64), default="intelbras_g08_mac")
+    source: Mapped[str] = mapped_column(String(64), default="olt")
+    command: Mapped[Optional[str]] = mapped_column(String(128))
     collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
 
 

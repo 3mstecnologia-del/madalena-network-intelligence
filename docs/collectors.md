@@ -23,13 +23,15 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 | light | identity, ARP, DHCP, FDB |
 | full | light + resource, interfaces, neighbors |
 
-Live: `MikroTikCollector.collect_live` → `SshTransport` wrapped in `ReadOnlyTransport`. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`.
+Live: `MikroTikCollector.collect_live` tries SSH exec, then interactive SSH/Telnet, then the read-only RouterOS API, each wrapped in `ReadOnlyTransport`. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`.
 
 Tests must use `MemoryTransport` or `collect_from_texts`.
 
 ## Intelbras G08
 
-Parser scaffold for ONT brief + MAC table using skill-documented read commands. Live transport remains `not_implemented` / `skipped`. Do not invent a CLI dialect here. See `collectors/intelbras_g08/TODO.md`.
+Live collection uses an interactive CLI transport (SSH or Telnet from runtime secrets) behind a show-only allowlist. Primary command: `show ont mac-address`. The skill-documented `show ont mac-address-table interface gpon all` is a fallback if the short form is incomplete. See `collectors/intelbras_g08/TODO.md`.
+
+Do not duplicate `olt-intelbras-g08-ops` skill content here.
 
 ## Adding a collector
 

@@ -20,7 +20,10 @@ MIKROTIK_READ_ALLOWLIST: tuple[str, ...] = (
     "/ip neighbor print detail",
 )
 
-# Logical collection steps: (result_key, command)
+MIKROTIK_DHCP_COMMANDS: tuple[tuple[str, str], ...] = (
+    ("dhcp", "/ip dhcp-server lease print detail without-paging"),
+)
+
 MIKROTIK_LIGHT_COMMANDS: tuple[tuple[str, str], ...] = (
     ("identity", "/system identity print"),
     ("arp", "/ip arp print detail"),

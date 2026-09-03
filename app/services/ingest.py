@@ -46,6 +46,8 @@ def _as_utc(dt: datetime) -> datetime:
 class IngestService:
     def __init__(self, db: Session):
         self.db = db
+        self._mac_rows: dict[tuple[UUID, str], MacAddress] = {}
+        self._ip_rows: dict[tuple[UUID, str], IpAddress] = {}
 
     def start_run(
         self,
@@ -114,6 +116,8 @@ class IngestService:
         created = updated = 0
         seen = 0
         run_id = run.id if run else None
+        self._mac_rows = {}
+        self._ip_rows = {}
 
         if result.identity:
             self._apply_identity(tenant_id, device_id, result.identity)
@@ -185,30 +189,36 @@ class IngestService:
         self.db.add(device)
 
     def _touch_mac(self, tenant_id: UUID, mac: str, when: datetime) -> None:
-        row = self.db.scalar(
-            select(MacAddress).where(MacAddress.tenant_id == tenant_id, MacAddress.mac == mac)
-        )
+        key = (tenant_id, mac)
+        row = self._mac_rows.get(key)
         if row is None:
-            self.db.add(
-                MacAddress(tenant_id=tenant_id, mac=mac, first_seen=when, last_seen=when)
+            row = self.db.scalar(
+                select(MacAddress).where(MacAddress.tenant_id == tenant_id, MacAddress.mac == mac)
             )
-        else:
-            if _as_utc(when) > _as_utc(row.last_seen):
-                row.last_seen = when
+        if row is None:
+            row = MacAddress(tenant_id=tenant_id, mac=mac, first_seen=when, last_seen=when)
             self.db.add(row)
+        elif _as_utc(when) > _as_utc(row.last_seen):
+            row.last_seen = when
+            self.db.add(row)
+        self._mac_rows[key] = row
 
     def _touch_ip(self, tenant_id: UUID, address: str, when: datetime) -> None:
-        row = self.db.scalar(
-            select(IpAddress).where(IpAddress.tenant_id == tenant_id, IpAddress.address == address)
-        )
+        key = (tenant_id, address)
+        row = self._ip_rows.get(key)
         if row is None:
-            self.db.add(
-                IpAddress(tenant_id=tenant_id, address=address, first_seen=when, last_seen=when)
+            row = self.db.scalar(
+                select(IpAddress).where(
+                    IpAddress.tenant_id == tenant_id, IpAddress.address == address
+                )
             )
-        else:
-            if _as_utc(when) > _as_utc(row.last_seen):
-                row.last_seen = when
+        if row is None:
+            row = IpAddress(tenant_id=tenant_id, address=address, first_seen=when, last_seen=when)
             self.db.add(row)
+        elif _as_utc(when) > _as_utc(row.last_seen):
+            row.last_seen = when
+            self.db.add(row)
+        self._ip_rows[key] = row
 
     def _upsert_interface(self, tenant_id, device_id, iface) -> tuple[int, int]:
         row = self.db.scalar(
@@ -439,6 +449,7 @@ class IngestService:
                     last_seen=om.observed_at,
                     observed_at=om.observed_at,
                     source=om.source,
+                    command=getattr(om, "command", None),
                     collection_run_id=run_id,
                 )
             )
@@ -446,6 +457,9 @@ class IngestService:
         row.pon = om.pon or row.pon
         row.vlan_id = om.vlan_id if om.vlan_id is not None else row.vlan_id
         row.gem = om.gem or row.gem
+        if getattr(om, "command", None):
+            row.command = om.command
+        row.source = om.source or row.source
         row.last_seen = om.observed_at
         row.observed_at = om.observed_at
         row.collection_run_id = run_id

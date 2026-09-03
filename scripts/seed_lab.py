@@ -55,7 +55,8 @@ def main() -> None:
             return d
 
         ensure_device("LAB-MK", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK")
-        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_EXAMPLE_OLT_G08")
+        ensure_device("LAB-MK200", "mikrotik", "MikroTik", "RouterOS", "DEVICE_LAB_MK200")
+        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_LAB_OLT")
 
         for code, name, ctype in [
             ("mikrotik_dhcp", "MikroTik DHCP", "mikrotik"),
