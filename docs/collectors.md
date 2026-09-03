@@ -1,5 +1,7 @@
 # Collectors
 
+Workflow to add a family: [development/adding-a-collector.md](development/adding-a-collector.md). This file is the spec of collectors that already exist.
+
 ## Design
 
 Transport ≠ parser. Phase 1 emphasizes parsers + fixtures; live transport returns `skipped` / `not_implemented` without secrets.

@@ -40,7 +40,7 @@ flowchart TB
   MCP --> HERMES
 ```
 
-Multi-tenant model: **Tenant → Site → Device → observations**.
+Multi-tenant model: **Tenant → Site → Device → observations**. Every operational query requires `tenant`. Product architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
 ## Requirements (host)
 
@@ -96,12 +96,14 @@ HTTP base: `http://127.0.0.1:8081`
 
 ## First lab tenant
 
-Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real UNIPLAC credentials or IPs in this repository**.
+Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real customer credentials or IPs in this repository**.
 
 ## Collectors
 
 - **MikroTik**: DHCP leases, ARP, bridge FDB parsers + collector scaffold (ROS7). Live SSH/REST transport TODO.
 - **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops` skill. Live transport TODO; see `collectors/intelbras_g08/TODO.md`.
+
+How to add a collector: [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md). Specs: [`docs/collectors.md`](docs/collectors.md).
 
 ## Monitoring integrations
 
@@ -116,6 +118,17 @@ SNMP communities, host IPs, and credentials stay in Zabbix/Infisical — never i
 ## Hermes integration (future)
 
 Skills such as `mikrotik-routeros-ops` / `olt-intelbras-g08-ops` may call this MCP to locate MAC/IP/ONU context before operational changes. Do not embed this codebase inside the skills repo.
+
+## Development standards
+
+How this product is developed, tested, and evolved (not a copy of the global 3MS User Rule):
+
+- Cursor Project Rules: [`.cursor/rules/`](.cursor/rules/)
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- Testing: [`docs/testing/strategy.md`](docs/testing/strategy.md)
+- Local Docker ops: [`docs/operations/local-development.md`](docs/operations/local-development.md)
+- Agent map: [`AGENTS.md`](AGENTS.md)
 
 ## Security
 

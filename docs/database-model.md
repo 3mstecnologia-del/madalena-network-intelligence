@@ -1,5 +1,7 @@
 # Database model
 
+Concepts (observation vs current view vs correlated conclusion): [data-model/concepts.md](data-model/concepts.md).
+
 Core hierarchy: `tenants` → `sites` → `devices` → interfaces / observations.
 
 Identity: `mac_addresses`, `ip_addresses` (per-tenant unique).
