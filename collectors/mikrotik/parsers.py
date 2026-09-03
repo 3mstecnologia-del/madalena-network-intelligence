@@ -6,8 +6,16 @@ import re
 from collections.abc import Iterator
 from typing import Optional
 
+from app.core.ip import normalize_ip
 from app.core.mac import normalize_mac
-from collectors.common.types import NormalizedArp, NormalizedDhcpLease, NormalizedMacFdb
+from collectors.common.types import (
+    NormalizedArp,
+    NormalizedDhcpLease,
+    NormalizedIdentity,
+    NormalizedInterface,
+    NormalizedMacFdb,
+    NormalizedNeighbor,
+)
 
 _ENTRY_START = re.compile(r"^(\d+)\s+")
 
@@ -50,15 +58,29 @@ def _clean_opt(v: Optional[str]) -> Optional[str]:
     return v.strip('"')
 
 
+def _safe_ip(value: str) -> Optional[str]:
+    try:
+        return normalize_ip(value)
+    except ValueError:
+        return None
+
+
 def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
     results: list[NormalizedDhcpLease] = []
     if "mac-address=" in text:
         for stanza in _iter_property_stanzas(text):
             if stanza.get("mac-address") and stanza.get("address"):
+                ip = _safe_ip(stanza["address"])
+                try:
+                    mac = normalize_mac(stanza["mac-address"])
+                except ValueError:
+                    continue
+                if ip is None:
+                    continue
                 results.append(
                     NormalizedDhcpLease(
-                        mac=normalize_mac(stanza["mac-address"]),
-                        ip_address=stanza["address"],
+                        mac=mac,
+                        ip_address=ip,
                         hostname=_clean_opt(stanza.get("host-name")),
                         server=_clean_opt(stanza.get("server")),
                         status=_clean_opt(stanza.get("status")),
@@ -93,7 +115,7 @@ def parse_dhcp_leases(text: str) -> list[NormalizedDhcpLease]:
         results.append(
             NormalizedDhcpLease(
                 mac=mac,
-                ip_address=m.group("ip"),
+                ip_address=normalize_ip(m.group("ip")),
                 hostname=_clean_opt(m.group("host")),
                 server=_clean_opt(m.group("server")),
                 status=_clean_opt(m.group("status")),
@@ -107,10 +129,17 @@ def parse_arp(text: str) -> list[NormalizedArp]:
     if "mac-address=" in text:
         for stanza in _iter_property_stanzas(text):
             if stanza.get("mac-address") and stanza.get("address"):
+                ip = _safe_ip(stanza["address"])
+                try:
+                    mac = normalize_mac(stanza["mac-address"])
+                except ValueError:
+                    continue
+                if ip is None:
+                    continue
                 results.append(
                     NormalizedArp(
-                        mac=normalize_mac(stanza["mac-address"]),
-                        ip_address=stanza["address"],
+                        mac=mac,
+                        ip_address=ip,
                         interface=_clean_opt(stanza.get("interface")),
                     )
                 )
@@ -134,7 +163,7 @@ def parse_arp(text: str) -> list[NormalizedArp]:
         except ValueError:
             continue
         results.append(
-            NormalizedArp(mac=mac, ip_address=m.group("ip"), interface=_clean_opt(m.group("iface")))
+            NormalizedArp(mac=mac, ip_address=normalize_ip(m.group("ip")), interface=_clean_opt(m.group("iface")))
         )
     return results
 
@@ -146,9 +175,13 @@ def parse_bridge_fdb(text: str) -> list[NormalizedMacFdb]:
             if not stanza.get("mac-address"):
                 continue
             vlan = stanza.get("vid") or stanza.get("vlan-id")
+            try:
+                mac = normalize_mac(stanza["mac-address"])
+            except ValueError:
+                continue
             results.append(
                 NormalizedMacFdb(
-                    mac=normalize_mac(stanza["mac-address"]),
+                    mac=mac,
                     interface=_clean_opt(stanza.get("on-interface") or stanza.get("interface")),
                     vlan_id=int(vlan) if vlan and vlan.isdigit() else None,
                     bridge=_clean_opt(stanza.get("bridge")),
@@ -182,3 +215,75 @@ def parse_bridge_fdb(text: str) -> list[NormalizedMacFdb]:
             )
         )
     return results
+
+
+def parse_identity(text: str) -> Optional[NormalizedIdentity]:
+    """Parse `/system identity print` and optional `/system resource print`."""
+    name = None
+    version = None
+    for stanza in _iter_property_stanzas(text) if "=" in text else []:
+        name = name or _clean_opt(stanza.get("name"))
+        version = version or _clean_opt(stanza.get("version"))
+    if name is None:
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("name:"):
+                name = stripped.split(":", 1)[1].strip() or None
+            if stripped.lower().startswith("version:"):
+                version = stripped.split(":", 1)[1].strip() or None
+    if not name and not version:
+        return None
+    return NormalizedIdentity(name=name, version=version)
+
+
+def parse_interfaces(text: str) -> list[NormalizedInterface]:
+    results: list[NormalizedInterface] = []
+    if "name=" in text:
+        for stanza in _iter_property_stanzas(text):
+            name = _clean_opt(stanza.get("name"))
+            if not name:
+                continue
+            results.append(
+                NormalizedInterface(
+                    name=name,
+                    if_type=_clean_opt(stanza.get("type")),
+                    admin_status=_clean_opt(stanza.get("disabled")),
+                    oper_status=_clean_opt(stanza.get("running")),
+                    mac=_safe_mac(stanza.get("mac-address")),
+                )
+            )
+        if results:
+            return results
+    return results
+
+
+def parse_neighbors(text: str) -> list[NormalizedNeighbor]:
+    results: list[NormalizedNeighbor] = []
+    if "mac-address=" in text or "identity=" in text:
+        for stanza in _iter_property_stanzas(text):
+            mac_raw = stanza.get("mac-address")
+            mac = _safe_mac(mac_raw) if mac_raw else None
+            addr = stanza.get("address")
+            ip = _safe_ip(addr) if addr else None
+            ident = _clean_opt(stanza.get("identity"))
+            if not mac and not ident and not ip:
+                continue
+            results.append(
+                NormalizedNeighbor(
+                    mac=mac,
+                    ip_address=ip,
+                    interface=_clean_opt(stanza.get("interface")),
+                    identity=ident,
+                    platform=_clean_opt(stanza.get("platform") or stanza.get("board")),
+                )
+            )
+    return results
+
+
+def _safe_mac(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return normalize_mac(value)
+    except ValueError:
+        return None

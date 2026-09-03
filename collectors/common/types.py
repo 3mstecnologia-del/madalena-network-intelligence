@@ -63,10 +63,43 @@ class NormalizedOltMac:
 
 
 @dataclass
+class NormalizedIdentity:
+    name: Optional[str] = None
+    version: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "mikrotik_identity"
+
+
+@dataclass
+class NormalizedInterface:
+    name: str
+    if_type: Optional[str] = None
+    admin_status: Optional[str] = None
+    oper_status: Optional[str] = None
+    mac: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "mikrotik_interface"
+
+
+@dataclass
+class NormalizedNeighbor:
+    mac: Optional[str] = None
+    ip_address: Optional[str] = None
+    interface: Optional[str] = None
+    identity: Optional[str] = None
+    platform: Optional[str] = None
+    observed_at: datetime = field(default_factory=utcnow)
+    source: str = "mikrotik_neighbor"
+
+
+@dataclass
 class CollectorResult:
     dhcp: list[NormalizedDhcpLease] = field(default_factory=list)
     arp: list[NormalizedArp] = field(default_factory=list)
     fdb: list[NormalizedMacFdb] = field(default_factory=list)
     onus: list[NormalizedOnu] = field(default_factory=list)
     olt_macs: list[NormalizedOltMac] = field(default_factory=list)
+    identity: Optional[NormalizedIdentity] = None
+    interfaces: list[NormalizedInterface] = field(default_factory=list)
+    neighbors: list[NormalizedNeighbor] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)

@@ -56,7 +56,7 @@ class IntelbrasG08Collector:
             meta={
                 "mode": "live",
                 "status": "not_implemented",
-                "todo": "SSH transport + enable/paging handling; no live UNIPLAC calls in Phase 1",
+                "todo": "SSH transport + enable/paging; no live customer calls from this generic collector",
                 "documented_commands": DOCUMENTED_COMMANDS,
             }
         )
