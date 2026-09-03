@@ -2,14 +2,20 @@
 
 Multi-tenant network inventory and correlation platform for **Madalena / Hermes** (3MS Tecnologia).
 
-Answer questions like *"Where does MAC AA:BB:CC:DD:EE:FF come from?"* by correlating DHCP, ARP, bridge/FDB, and OLT/ONU observations — without destroying raw history.
+This is **not** a current-state-only inventory. Raw observations are kept so you can answer:
+
+- where is this MAC now, and where was it before?
+- which IPs did it use, on which device and interface?
+- which observations (source + collection run) support that correlation?
+
+Absence of a later observation is not treated as proof the device is gone.
 
 ## Skill vs Collector vs MCP
 
 | Piece | Responsibility |
 |-------|----------------|
 | **Skill** (`hermes-3ms-skills`) | Teaches Hermes how to *operate* equipment |
-| **Collector** (this repo) | Collects and normalizes data automatically |
+| **Collector** (this repo) | Collects and normalizes data automatically (read-only) |
 | **MCP** (`mcp_server`) | Lets Hermes *query* the structured inventory |
 
 No circular dependency: skills may call this MCP later; this project does not embed skills.
@@ -23,6 +29,7 @@ flowchart TB
     G08[Intelbras G08]
   end
   SCH[Scheduler]
+  NORM[Normalization]
   PG[(PostgreSQL)]
   CORR[Correlation Engine]
   API[REST API]
@@ -31,8 +38,9 @@ flowchart TB
 
   SCH --> MK
   SCH --> G08
-  MK --> PG
-  G08 --> PG
+  MK --> NORM
+  G08 --> NORM
+  NORM --> PG
   PG --> CORR
   CORR --> API
   CORR --> MCP
@@ -40,7 +48,9 @@ flowchart TB
   MCP --> HERMES
 ```
 
-Multi-tenant model: **Tenant → Site → Device → observations**.
+Multi-tenant model: **Tenant → Site → Device → observations**. Every operational query requires `tenant`.
+
+Details: [`docs/architecture.md`](docs/architecture.md), [`docs/collectors.md`](docs/collectors.md), [`docs/database-model.md`](docs/database-model.md), [`docs/runtime-configuration.md`](docs/runtime-configuration.md), [`docs/mcp.md`](docs/mcp.md).
 
 ## Requirements (host)
 
@@ -64,7 +74,7 @@ curl -sf http://127.0.0.1:8000/health
 curl -sf http://127.0.0.1:8081/health
 ```
 
-Or via Makefile wrappers: `make build up migrate test seed secret-scan`.
+Makefile: `make build up migrate test seed secret-scan test-persist`.
 
 ## API endpoints
 
@@ -72,12 +82,13 @@ Or via Makefile wrappers: `make build up migrate test seed secret-scan`.
 |--------|------|-------|
 | GET | `/health` | Liveness |
 | GET | `/tenants` | List tenants |
-| GET | `/devices?tenant=` | Tenant-scoped |
-| GET | `/devices/{id}?tenant=` | |
-| GET | `/macs?tenant=` | |
-| GET | `/macs/{mac}?tenant=` | Correlated view |
+| GET | `/devices?tenant=&limit=&offset=` | Tenant-scoped |
+| GET | `/devices/{id}?tenant=` | No credential/host refs |
+| GET | `/macs?tenant=&limit=&offset=` | |
+| GET | `/macs/{mac}?tenant=` | Correlated view + conflicts |
+| GET | `/macs/{mac}/history?tenant=` | Timeline + provenance |
 | GET | `/ips/{ip}?tenant=` | |
-| GET | `/collection-runs?tenant=` | |
+| GET | `/collection-runs?tenant=&limit=&offset=` | Completeness + command counts |
 | GET | `/docs` | OpenAPI UI |
 
 ## MCP tools
@@ -89,19 +100,23 @@ HTTP base: `http://127.0.0.1:8081`
 - `POST /tools/get_device`
 - `POST /tools/list_devices`
 - `POST /tools/list_tenant_network_assets`
-- `POST /tools/get_mac_history`
-- `POST /tools/get_collection_status`
+- `POST /tools/get_mac_history` — timeline with provenance
+- `POST /tools/get_collection_status` — completeness + freshness
 
 `GET /tools` lists them. Tenant is always required.
 
 ## First lab tenant
 
-Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real UNIPLAC credentials or IPs in this repository**.
+Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real customer credentials or IPs in this repository**.
+
+Runtime secrets: inject `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD` in the private `.env` (gitignored). See [`docs/runtime-configuration.md`](docs/runtime-configuration.md).
 
 ## Collectors
 
-- **MikroTik**: DHCP leases, ARP, bridge FDB parsers + collector scaffold (ROS7). Live SSH/REST transport TODO.
-- **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops` skill. Live transport TODO; see `collectors/intelbras_g08/TODO.md`.
+- **MikroTik**: identity, interfaces, ARP, DHCP leases, bridge/FDB, neighbors. Parsers are transport-agnostic. Live path is generic SSH behind a read-only allowlist (`ReadOnlyTransport`). Tests use `MemoryTransport`.
+- **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops`. Live transport not implemented; do not invent access.
+
+How to add a collector: [`docs/collectors.md`](docs/collectors.md).
 
 ## Monitoring integrations
 

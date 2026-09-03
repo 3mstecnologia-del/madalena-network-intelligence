@@ -1,0 +1,3 @@
+Flags: D - dynamic
+ 0   interface=ether1 mac-address=DE:AD:BE:EF:00:01 address=10.30.1.1 identity=SW-LAB-01 platform=MikroTik
+ 1   interface=ether2 mac-address=DE:AD:BE:EF:00:02 address=10.30.1.2 identity=SW-LAB-02 platform=MikroTik

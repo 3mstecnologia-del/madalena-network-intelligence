@@ -20,6 +20,7 @@ FORBIDDEN = [
     (re.compile(re.escape(_REAL_HOST), re.I), "real host leak"),
     (re.compile(r"BEGIN (RSA |OPENSSH )?PRIVATE KEY"), "private key block"),
     (re.compile(r"(?i)snmp[_-]?community\s*=\s*['\"][^'\"]+"), "snmp community"),
+    (re.compile(r"(?i)-----BEGIN[A-Z ]*PRIVATE KEY-----"), "pem private key"),
 ]
 
 SKIP_DIRS = {".git", ".venv", "__pycache__", ".ruff_cache", ".pytest_cache", "pgdata"}
@@ -55,7 +56,11 @@ def main() -> int:
         rel = str(path.relative_to(ROOT))
         if any(s in rel for s in ALLOW_PATH_SUBSTRINGS):
             # still scan fixtures for real host/password leaks
-            patterns = [p for p in FORBIDDEN if p[1] in {"known lab password leak", "real host leak", "private key block"}]
+            patterns = [
+                p
+                for p in FORBIDDEN
+                if p[1] in {"known lab password leak", "real host leak", "private key block", "pem private key"}
+            ]
         else:
             patterns = FORBIDDEN
         for rx, label in patterns:

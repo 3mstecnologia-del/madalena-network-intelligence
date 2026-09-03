@@ -1,0 +1,3 @@
+# ONT_ID MAC VLAN
+0/1/14 aabb.ccdd.eeff vlan 30
+0/1/15 1122.3344.5566 vlan 30

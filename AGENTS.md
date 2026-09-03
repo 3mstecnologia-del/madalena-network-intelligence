@@ -20,8 +20,10 @@ Multi-tenant network inventory / correlation platform for Madalena/Hermes.
 ## Hard rules
 
 - Docker-only runtime for app dependencies
-- No live collection against real UNIPLAC/3MS gear in Phase 1 CI
+- No live collection against real customer gear in CI or this public repo
 - Tenant required on every query path
+- MikroTik collectors are read-only (print/get allowlist)
+- Preserve observation history; never collapse to current-state-only
 - Secret scan before any public GitHub publish
 - Do not modify `hermes-3ms-skills` unless explicitly asked
 

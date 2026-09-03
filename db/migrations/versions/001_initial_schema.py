@@ -124,7 +124,7 @@ def upgrade() -> None:
         sa.Column("records_updated", sa.Integer(), server_default="0"),
         sa.Column("error_summary", sa.Text()),
     )
-    for table in ("dhcp_leases", "arp_observations", "mac_observations", "olt_mac_observations"):
+    for _table in ("dhcp_leases", "arp_observations", "mac_observations", "olt_mac_observations"):
         pass
     op.create_table(
         "dhcp_leases",

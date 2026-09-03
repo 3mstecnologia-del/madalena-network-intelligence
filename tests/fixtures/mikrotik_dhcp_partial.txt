@@ -1,0 +1,2 @@
+0 address=10.30.1.50 mac-address=AA:BB:CC:DD:EE:FF host-name=notebook-exemplo status=bound last-seen=1m
+1 address=not-an-ip mac-address=11:22:33:44:55:66 status=bound
