@@ -1,0 +1,4 @@
+Flags: R - running, S - slave
+ 0  R name=bridge-lan type=bridge mac-address=AA:AA:AA:AA:AA:01 disabled=no running=yes
+ 1  R name=ether1 type=ether mac-address=AA:AA:AA:AA:AA:02 disabled=no running=yes
+ 2    name=ether2 type=ether mac-address=AA:AA:AA:AA:AA:03 disabled=yes running=no

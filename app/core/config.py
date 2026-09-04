@@ -1,4 +1,6 @@
 from functools import lru_cache
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
     mcp_http_port: int = 8081
     seed_tenant_slug: str = "example-tenant"
     seed_site_slug: str = "example-site"
+    seed_exclude_vlan: Optional[str] = None
 
 
 @lru_cache
