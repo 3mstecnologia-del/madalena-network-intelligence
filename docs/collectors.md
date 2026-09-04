@@ -41,7 +41,7 @@ Read-only HTTP GET against the documented Integration API (`X-API-Key`). Runtime
 - `{PREFIX}_API_KEY`
 - `{PREFIX}_SITE` — optional site UUID; if omitted, `GET /v1/sites` then devices per site
 - `{PREFIX}_TLS_CA` or global `NI_TLS_CA_FILE` — PEM CA/chain so TLS verification stays on
-- `{PREFIX}_VERIFY_TLS` — default true; do not use `false` as the deploy path
+- `{PREFIX}_VERIFY_TLS` — default true. `false` is a UniFi-only lab exception (httpx `verify=False` for this collector; sanitized warning; does not affect SSH)
 
 Allowlisted GET paths only: `/v1/info`, `/v1/sites`, `/v1/sites/{siteId}/devices`, `/v1/sites/{siteId}/devices/{deviceId}`. No adopt, actions, port control, or unadopt.
 

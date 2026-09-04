@@ -5,6 +5,7 @@ Never logs API keys. Only GET. Paths must match the read-only allowlist.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Optional, Protocol, Union
 
@@ -14,22 +15,29 @@ from collectors.common.secrets import DeviceSecrets
 from collectors.common.transport import ReadOnlyViolation, TransportError, sanitize_error
 from collectors.unifi.readonly import unifi_get_allowed
 
+logger = logging.getLogger(__name__)
+
 TlsVerify = Union[bool, str]
+
+TLS_VERIFY_DISABLED_WARNING = (
+    "unifi collector TLS verification disabled (explicit VERIFY_TLS=false)"
+)
 
 
 def tls_verify_setting(secrets: DeviceSecrets) -> TlsVerify:
-    """Return httpx verify= value. A CA file keeps verification on.
+    """Return httpx verify= value for this UniFi client only.
 
-    verify=False is not the supported UniFi deploy path; provide NI_TLS_CA_FILE
-    or {PREFIX}_TLS_CA instead.
+    Default is verification on (system CAs, or a mounted PEM via tls_ca_file).
+    `{PREFIX}_VERIFY_TLS=false` is a deliberate UniFi-only lab exception and
+    wins over a CA path. It does not change SSH or other collectors.
     """
+    if secrets.verify_tls is False:
+        return False
     ca = (secrets.tls_ca_file or "").strip()
     if ca:
         if not os.path.isfile(ca):
             raise TransportError("tls ca file missing")
         return ca
-    if secrets.verify_tls is False:
-        return False
     return True
 
 
@@ -63,6 +71,8 @@ class UnifiHttpClient:
         self._api_key = secrets.api_key or ""
         self._timeout = timeout_sec
         self._verify = tls_verify_setting(secrets)
+        if self._verify is False:
+            logger.warning(TLS_VERIFY_DISABLED_WARNING)
 
     def get_json(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         if not unifi_get_allowed(path):
