@@ -66,6 +66,27 @@ def test_parse_neighbors():
     assert rows[0].interface == "ether1"
 
 
+def test_parse_neighbors_protocols_and_remote_interface():
+    rows = parse_neighbors((FIX / "mikrotik_neighbors_protocols.txt").read_text())
+    assert len(rows) == 3
+    assert {r.protocol for r in rows} == {"lldp", "mndp", "cdp"}
+    lldp = next(r for r in rows if r.protocol == "lldp")
+    assert lldp.remote_interface == "sfp2"
+    assert lldp.version == "7.15"
+    assert lldp.interface == "ether1"
+
+
+def test_parse_neighbors_missing_fields_is_not_error():
+    rows = parse_neighbors((FIX / "mikrotik_neighbors_sparse.txt").read_text())
+    assert len(rows) == 2
+    named = next(r for r in rows if r.identity == "SWITCH-01")
+    assert named.mac is None
+    assert named.ip_address is None
+    mac_only = next(r for r in rows if r.mac == "AA:BB:CC:44:00:01")
+    assert mac_only.identity is None
+    assert mac_only.protocol is None
+
+
 def test_parse_arp_skips_bad_mac():
     text = "0   address=10.30.1.9 mac-address=not-a-mac interface=ether1\n"
     assert parse_arp(text) == []

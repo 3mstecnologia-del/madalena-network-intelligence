@@ -28,6 +28,9 @@ Madalena VPS: [`operations/madalena-deployment.md`](operations/madalena-deployme
 
 - MikroTik: `identity`, `dhcp`, `arp`, `fdb`, `interfaces`, `neighbors`
 - G08: `ont_mac_table`
+- UniFi Network: `inventory`, `device_details`
+
+UniFi runtime keys (in addition to the SSH set when used): `{PREFIX}_BASE_URL`, `{PREFIX}_API_KEY`, optional `{PREFIX}_SITE`, optional `{PREFIX}_VERIFY_TLS`.
 
 A router with no DHCP server omits `dhcp`. The product does not assume which fleet member serves leases.
 

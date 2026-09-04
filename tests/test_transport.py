@@ -75,6 +75,7 @@ def test_collect_via_transport_partial():
         "/system identity print": (FIX / "mikrotik_identity.txt").read_text(),
         "/ip arp print detail": (FIX / "mikrotik_arp.txt").read_text(),
         "/ip dhcp-server lease print detail": (FIX / "mikrotik_dhcp.txt").read_text(),
+        "/ip neighbor print detail": (FIX / "mikrotik_neighbors.txt").read_text(),
     }
     errors = {
         "/interface bridge host print detail": "timeout",
@@ -84,7 +85,7 @@ def test_collect_via_transport_partial():
     result = collector.collect_via_transport(transport, lightweight=True)
     assert result.meta["completeness"] == "partial"
     assert result.meta["status"] == "partial"
-    assert result.meta["commands_ok"] == 3
+    assert result.meta["commands_ok"] == 4
     assert result.meta["commands_failed"] == 1
     assert result.dhcp
     assert result.arp

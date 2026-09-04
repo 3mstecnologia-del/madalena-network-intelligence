@@ -14,6 +14,7 @@ Canonical docs for humans and agents. Prefer updating these over creating parall
 | Testing strategy | [testing/strategy.md](testing/strategy.md) |
 | Local Docker operations | [operations/local-development.md](operations/local-development.md) |
 | Madalena VPS deploy | [operations/madalena-deployment.md](operations/madalena-deployment.md) |
+| Topology live validation (operacional) | [operations/topology-live-validation.md](operations/topology-live-validation.md) |
 | Architectural decisions | [decisions/](decisions/) |
 | Security notes | [security.md](security.md) |
 

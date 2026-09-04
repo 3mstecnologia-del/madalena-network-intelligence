@@ -9,7 +9,7 @@ Table names, upsert keys, and indexes: [database-model.md](../database-model.md)
 | **Tenant** | Security and data boundary. Every observation belongs to one tenant. |
 | **Site** | Optional grouping inside a tenant (building, campus). Not a second security boundary. |
 | **Device / source** | An observed box (MikroTik, OLT, …) or logical source. Many devices per tenant. |
-| **Observation** | A fact seen at a time from a collector/run: MAC on an interface, DHCP lease, OLT MAC row, neighbor, … |
+| **Observation** | A fact seen at a time from a collector/run: MAC on an interface, DHCP lease, OLT MAC row, neighbor, topology link, UniFi inventory node, … |
 | **Endpoint / MAC** | Canonical identifier `AA:BB:CC:DD:EE:FF` scoped by tenant. |
 | **IP evidence** | An IP seen with a MAC (DHCP, ARP, neighbor). Not “the” IP until correlation says so — and even then conflicts stay visible. |
 | **OLT evidence** | MAC seen on a PON/ONU with distinct fields: ONT-ID, serial, GEM, VID, interface. |
@@ -41,7 +41,7 @@ flowchart TB
 
 **Historical evidence** — the rest of the rows and the timeline. Used for “where was it?” and provenance.
 
-**Correlated conclusion** — a join across sources (DHCP ∩ OLT MAC, etc.) plus any `conflicts`. It is derived, not a substitute for raw observations. Without provenance it is incomplete.
+**Correlated conclusion** — a join across sources (DHCP ∩ OLT MAC, topology MAC/source-id match, bilateral confirmation, etc.) plus any `conflicts`. Hostname/identity match alone is not a deterministic device identity. It is derived, not a substitute for raw observations. Without provenance it is incomplete.
 
 ## Identifiers
 

@@ -22,12 +22,29 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 
 | Mode | Commands |
 |------|----------|
-| light | identity, ARP, DHCP, FDB |
-| full | light + resource, interfaces, neighbors |
+| light | identity, ARP, DHCP, FDB, neighbors |
+| full | light + resource, interfaces |
 
 Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`. Per-device `collectors_enabled` selects which command groups run (a fleet member may omit `dhcp`).
 
+Neighbor fields are optional. Missing identity, remote interface, protocol, or version is not an error. Neighbors also produce `topology_links` (observations, not correlated truth).
+
 Tests must use `MemoryTransport` or `collect_from_texts`.
+
+## UniFi Network (Integration API)
+
+Read-only HTTP GET against the documented Integration API (`X-API-Key`). Runtime:
+
+- `{PREFIX}_BASE_URL` — Integration root (no hostname hardcoded)
+- `{PREFIX}_API_KEY`
+- `{PREFIX}_SITE` — optional site UUID; if omitted, `GET /v1/sites` then devices per site
+- `{PREFIX}_VERIFY_TLS` — default true
+
+Allowlisted GET paths only: `/v1/info`, `/v1/sites`, `/v1/sites/{siteId}/devices`, `/v1/sites/{siteId}/devices/{deviceId}`. No adopt, actions, port control, or unadopt.
+
+Inventory fields follow the documented schema (`id`, `mac`/`macAddress`, `name`, `model`, `state`, `type`, optional `ipAddress`, `firmwareVersion`). Uplink in the documented schema is `{ "deviceId": "<uuid>" }` and is stored when present. Ports (`interfaces.ports[].idx`) become local interfaces `port-{idx}` when the detail payload includes them.
+
+Live HTTP is not exercised in CI. Tests use `MemoryUnifiClient` and synthetic JSON fixtures.
 
 ## Intelbras G08
 
