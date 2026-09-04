@@ -20,6 +20,6 @@ Public code must not contain real customer VLANs, names, or management networks.
 
 ## Consequences
 
-- Collectors/ingest need a policy hook before insert (implementation may land after this ADR)
+- `IngestService` applies `exclusion_policies` plus per-device `collectors_enabled` after parse and before insert
 - Tests use synthetic VLAN/network IDs, never production identifiers
 - “We deleted it later” is not an acceptable substitute for not persisting

@@ -46,7 +46,8 @@ flowchart LR
   T --> C[Collector]
   C --> P[Parser]
   P --> N[Normalization / domain]
-  N --> DB[Persistence]
+  N --> F[Policy filter]
+  F --> DB[Persistence]
   DB --> Q[Correlation / query]
   Q --> X[API / MCP]
 ```
@@ -58,6 +59,7 @@ flowchart LR
 | Collector | Orchestrates approved reads. Sets completeness. No query/API logic. |
 | Parser | Text → structures. No network I/O. Known layouts only. Malformed input must not cause device mutation. |
 | Domain | Canonical MAC (`AA:BB:CC:DD:EE:FF`), canonical IP, interface names, observation meaning, provenance. |
+| Policy | Drop VLAN/CIDR/source/collector/interface matches **before** insert. Runtime table, no customer values in Git. |
 | Persistence | Facts + time. Upsert matching keys; insert a new row when the key changes. Do not delete because a later run omitted a row. |
 | Correlation / query | Join evidence. Expose conflicts. Shared by API and MCP. |
 | API / MCP | Contracts. Tenant required. No second correlation engine. |

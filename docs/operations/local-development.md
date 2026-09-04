@@ -18,8 +18,9 @@ make test
 
 Health:
 
-- API: `http://127.0.0.1:8000/health` (OpenAPI at `/docs`)
-- MCP tools HTTP: `http://127.0.0.1:8081/health`
+- API: `http://127.0.0.1:8000/health` (process) and `/ready` (database). OpenAPI at `/docs`
+- MCP: `http://127.0.0.1:8081/health` and `/ready`
+- Full stack check: `./scripts/validate-deployment.sh`
 
 Makefile wrappers: `build`, `up`, `down`, `logs`, `migrate`, `test`, `seed`, `secret-scan`. Persistence restart (`test-persist`) and lab (`lab-collect`, `lab-validate`) exist only when defined in the local `Makefile`.
 

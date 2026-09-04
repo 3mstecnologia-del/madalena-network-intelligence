@@ -60,27 +60,25 @@ Product architecture: [`docs/architecture/overview.md`](docs/architecture/overvi
 
 No host Python, pip, Node, npm, or PostgreSQL installs.
 
-## Quick start
+## Quick start (lab)
+
+Madalena VPS: [`docs/operations/madalena-deployment.md`](docs/operations/madalena-deployment.md).
 
 ```bash
 cp .env.example .env
-docker compose config
-docker compose build
-docker compose up -d
-docker compose run --rm migrate
-docker compose run --rm api python -m scripts.seed_lab
-docker compose run --rm --no-deps api pytest -q
-curl -sf http://127.0.0.1:8000/health
-curl -sf http://127.0.0.1:8081/health
+chmod +x scripts/bootstrap.sh scripts/validate-deployment.sh
+SEED=true ./scripts/bootstrap.sh
+./scripts/validate-deployment.sh
 ```
 
-Makefile: `make build up migrate test seed secret-scan test-persist`.
+Makefile: `make test secret-scan test-persist`. Deploy helpers: `make bootstrap` / `make validate-deploy`.
 
 ## API endpoints
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/health` | Liveness |
+| GET | `/health` | Process up |
+| GET | `/ready` | Database reachable |
 | GET | `/tenants` | List tenants |
 | GET | `/devices?tenant=&limit=&offset=` | Tenant-scoped |
 | GET | `/devices/{id}?tenant=` | No credential/host refs |
@@ -114,7 +112,7 @@ Runtime secrets: inject `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD
 ## Collectors
 
 - **MikroTik**: identity, interfaces, ARP, DHCP leases, bridge/FDB, neighbors. Parsers are transport-agnostic. Live path is generic SSH behind a read-only allowlist (`ReadOnlyTransport`). Tests use `MemoryTransport`.
-- **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops`. Live transport not implemented; do not invent access.
+- **Intelbras G08**: ONT MAC table via `show ont mac-address-table interface gpon all` (read-only allowlist). Do not invent other G08 commands.
 
 How to add a collector: [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md). Specs: [`docs/collectors.md`](docs/collectors.md).
 
@@ -141,6 +139,7 @@ How this product is developed, tested, and evolved (not a copy of the global 3MS
 - Architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md)
 - Testing: [`docs/testing/strategy.md`](docs/testing/strategy.md)
 - Local Docker ops: [`docs/operations/local-development.md`](docs/operations/local-development.md)
+- Madalena deploy: [`docs/operations/madalena-deployment.md`](docs/operations/madalena-deployment.md)
 - Agent map: [`AGENTS.md`](AGENTS.md)
 
 ## Security

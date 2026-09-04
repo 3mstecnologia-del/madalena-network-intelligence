@@ -25,7 +25,7 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 | light | identity, ARP, DHCP, FDB |
 | full | light + resource, interfaces, neighbors |
 
-Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`.
+Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`. Per-device `collectors_enabled` selects which command groups run (a fleet member may omit `dhcp`).
 
 Tests must use `MemoryTransport` or `collect_from_texts`.
 

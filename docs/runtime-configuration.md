@@ -18,6 +18,25 @@ At process start, an external system (Infisical sync, Compose `env_file`, orches
 
 `collectors.common.secrets.resolve_secrets(provider, prefix)` reads those keys. Missing keys → collection `skipped`, not a crash.
 
-Local Docker: copy `.env.example` to `.env` and keep real values gitignored. Use RFC1918 lab addresses only in your private `.env`.
+Local Docker: copy `.env.example` to `.env` and keep real values gitignored.
+
+Madalena VPS: [`operations/madalena-deployment.md`](operations/madalena-deployment.md).
+
+## Device collectors
+
+`devices.collectors_enabled` is a JSON array of collector keys (runtime, not Git):
+
+- MikroTik: `identity`, `dhcp`, `arp`, `fdb`, `interfaces`, `neighbors`
+- G08: `ont_mac_table`
+
+A router with no DHCP server omits `dhcp`. The product does not assume which fleet member serves leases.
+
+Optional `devices.collection_interval_sec` skips a device if its last finished run is newer than that interval.
+
+## Exclusion (before persist)
+
+Table `exclusion_policies`: `rule_type` = `vlan` | `cidr` | `source` | `collector` | `interface`, plus optional site/device scope.
+
+Seed may insert a VLAN rule from private env `SEED_EXCLUDE_VLAN` (empty by default).
 
 Do not put customer hostnames, tunnels, or inventory lists in this repository.

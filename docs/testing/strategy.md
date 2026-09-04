@@ -6,7 +6,7 @@ How this repository is tested. Global 3MS testing principles stay in User Rules;
 
 `make test` → `docker compose run --rm --no-deps api pytest -q`
 
-That is the public suite: parsers, normalization, correlation, API, MCP, sanitization, allowlists, in-memory persistence/history. It must not need real equipment or real secrets.
+Public tests also cover policy exclusion (dropped rows never persist), multi-MikroTik DHCP, scheduler continuation after one device fails, and `/ready`.
 
 There is no live collection in public CI. Do not add it.
 

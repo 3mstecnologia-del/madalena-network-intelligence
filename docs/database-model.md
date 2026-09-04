@@ -24,7 +24,9 @@ Absence of a row in a later collection run is **not** proof of absence.
 
 ## Collection runs
 
-`collection_runs`: tenant, site, device, collector_type, collector_version, status, completeness, command counts, record counts, sanitized error_summary, started_at, finished_at.
+`collection_runs`: tenant, site, device, collector_type, collector_version, status, completeness, command counts, record counts (`seen` / `created` / `updated` / `excluded`), `parse_failures`, sanitized error_summary, started_at, finished_at.
+
+`devices.collectors_enabled` (JSON list) and `devices.collection_interval_sec` are runtime. `exclusion_policies` holds VLAN/CIDR/source/collector/interface rules per tenant (optional site/device).
 
 ## Indexes (query paths)
 
