@@ -452,3 +452,43 @@ def test_finish_run_sanitizes_error_before_persist(db: Session):
     assert "super-secret" not in stored.error_summary
     assert "192.0.2.8" not in stored.error_summary
     assert "labuser" not in stored.error_summary
+
+
+def test_device_without_dhcp_still_correlates_from_arp_fdb(db: Session):
+    t1, _, d1, _, _, _ = seed_two_tenants(db)
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(
+            arp=[NormalizedArp(mac=MAC, ip_address="10.30.1.50", interface="bridge")],
+            fdb=[NormalizedMacFdb(mac=MAC, interface="ether3", vlan_id=30)],
+        ),
+    )
+    db.commit()
+    assert db.scalar(select(DhcpLease).where(DhcpLease.tenant_id == t1.id)) is None
+    corr = CorrelationEngine(db).correlate_mac("example-tenant", MAC)
+    assert corr.arp
+    assert corr.fdb
+    assert corr.current_locations
+
+
+def test_dhcp_from_two_mikrotiks_is_evidence_not_error(db: Session):
+    t1, _, d1, d1b, _, _ = seed_two_tenants(db)
+    ingest = IngestService(db)
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(dhcp=[NormalizedDhcpLease(mac=MAC, ip_address="10.30.1.50")]),
+    )
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1b.id,
+        result=CollectorResult(dhcp=[NormalizedDhcpLease(mac=MAC, ip_address="10.30.1.50")]),
+    )
+    db.commit()
+    rows = list(db.scalars(select(DhcpLease).where(DhcpLease.tenant_id == t1.id, DhcpLease.mac == MAC)))
+    assert len(rows) == 2
+    devices = {r.device_id for r in rows}
+    assert devices == {d1.id, d1b.id}
+    corr = CorrelationEngine(db).correlate_mac("example-tenant", MAC)
+    assert len(corr.dhcp) >= 2

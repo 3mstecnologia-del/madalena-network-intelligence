@@ -37,4 +37,15 @@ MIKROTIK_FULL_COMMANDS: tuple[tuple[str, str], ...] = MIKROTIK_LIGHT_COMMANDS + 
     ("neighbors", "/ip neighbor print detail"),
 )
 
+# Map command step key → collector name used in device.collectors_enabled
+MIKROTIK_STEP_COLLECTOR: dict[str, str] = {
+    "identity": "identity",
+    "resource": "identity",
+    "dhcp": "dhcp",
+    "arp": "arp",
+    "fdb": "fdb",
+    "interfaces": "interfaces",
+    "neighbors": "neighbors",
+}
+
 COLLECTOR_VERSION = "0.3.0"

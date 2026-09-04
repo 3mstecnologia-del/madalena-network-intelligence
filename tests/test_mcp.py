@@ -153,3 +153,10 @@ def test_mcp_collection_status_isolates_tenant(db: Session, monkeypatch):
     res = client.post("/tools/get_collection_status", json={"tenant": "other-tenant"})
     assert res.status_code == 200
     assert res.json()["data"]["runs"] == []
+
+
+def test_mcp_ready(db: Session, monkeypatch):
+    client = _client(db, monkeypatch)
+    res = client.get("/ready")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"

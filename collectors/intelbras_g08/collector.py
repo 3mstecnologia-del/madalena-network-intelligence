@@ -115,7 +115,19 @@ class IntelbrasG08Collector:
         )
         return parsed
 
-    def collect_live(self) -> CollectorResult:
+    def collect_live(self, *, enabled_collectors: Optional[frozenset[str]] = None) -> CollectorResult:
+        if enabled_collectors is not None and "ont_mac_table" not in enabled_collectors:
+            return CollectorResult(
+                meta={
+                    "mode": "live",
+                    "status": "skipped",
+                    "completeness": "none",
+                    "reason": "no_enabled_collectors",
+                    "collector_version": self.collector_version,
+                    "family": G08_FAMILY,
+                    "command": G08_MAC_TABLE_COMMAND,
+                }
+            )
         if self._transport is not None:
             return self.collect_via_transport(self._transport)
         secrets = resolve_secrets(self.secret_provider, self.secret_prefix)

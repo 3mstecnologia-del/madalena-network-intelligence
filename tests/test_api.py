@@ -111,3 +111,13 @@ def test_api_device_omits_secret_refs(db: Session):
         assert "password" not in body
     finally:
         app.dependency_overrides.clear()
+
+
+def test_api_ready(db: Session):
+    client = _client(db)
+    try:
+        res = client.get("/ready")
+        assert res.status_code == 200
+        assert res.json()["status"] == "ok"
+    finally:
+        app.dependency_overrides.clear()

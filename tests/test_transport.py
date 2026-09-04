@@ -212,3 +212,13 @@ def test_g08_collect_via_transport():
     assert len(result.olt_macs) == 2
     assert result.olt_macs[0].source == "olt"
     assert result.onus
+
+
+def test_enabled_collectors_skips_other_commands():
+    transport = MemoryTransport({"/ip arp print detail": (FIX / "mikrotik_arp.txt").read_text()})
+    result = MikroTikCollector("env", "EXAMPLE").collect_via_transport(
+        transport, lightweight=True, enabled_collectors=frozenset({"arp"})
+    )
+    assert transport.calls == ["/ip arp print detail"]
+    assert result.arp
+    assert result.dhcp == []

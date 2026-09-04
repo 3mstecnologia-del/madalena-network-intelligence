@@ -32,6 +32,7 @@ from collectors.mikrotik.readonly import (
     MIKROTIK_FULL_COMMANDS,
     MIKROTIK_LIGHT_COMMANDS,
     MIKROTIK_READ_ALLOWLIST,
+    MIKROTIK_STEP_COLLECTOR,
 )
 from collectors.mikrotik.transport_ssh import SshTransport
 
@@ -73,13 +74,30 @@ class MikroTikCollector:
         )
 
     def collect_via_transport(
-        self, transport: Transport, *, lightweight: bool = True, dhcp_only: bool = False
+        self,
+        transport: Transport,
+        *,
+        lightweight: bool = True,
+        dhcp_only: bool = False,
+        enabled_collectors: Optional[frozenset[str]] = None,
     ) -> CollectorResult:
         guarded = ReadOnlyTransport(transport, MIKROTIK_READ_ALLOWLIST)
         if dhcp_only:
-            steps = MIKROTIK_DHCP_COMMANDS
+            steps = list(MIKROTIK_DHCP_COMMANDS)
         else:
-            steps = MIKROTIK_LIGHT_COMMANDS if lightweight else MIKROTIK_FULL_COMMANDS
+            steps = list(MIKROTIK_LIGHT_COMMANDS if lightweight else MIKROTIK_FULL_COMMANDS)
+        if enabled_collectors is not None:
+            steps = [(k, c) for k, c in steps if MIKROTIK_STEP_COLLECTOR.get(k, k) in enabled_collectors]
+        if not steps:
+            return CollectorResult(
+                meta={
+                    "mode": "transport",
+                    "status": "skipped",
+                    "completeness": "none",
+                    "reason": "no_enabled_collectors",
+                    "collector_version": self.collector_version,
+                }
+            )
         texts: dict[str, str] = {}
         errors: list[str] = []
         ok = failed = 0
@@ -138,10 +156,19 @@ class MikroTikCollector:
         )
         return parsed
 
-    def collect_live(self, *, lightweight: bool = True, dhcp_only: bool = False) -> CollectorResult:
+    def collect_live(
+        self,
+        *,
+        lightweight: bool = True,
+        dhcp_only: bool = False,
+        enabled_collectors: Optional[frozenset[str]] = None,
+    ) -> CollectorResult:
         if self._transport is not None:
             return self.collect_via_transport(
-                self._transport, lightweight=lightweight, dhcp_only=dhcp_only
+                self._transport,
+                lightweight=lightweight,
+                dhcp_only=dhcp_only,
+                enabled_collectors=enabled_collectors,
             )
         secrets = resolve_secrets(self.secret_provider, self.secret_prefix)
         if secrets is None:
@@ -175,7 +202,12 @@ class MikroTikCollector:
                     "collector_version": self.collector_version,
                 }
             )
-        result = self.collect_via_transport(transport, lightweight=lightweight, dhcp_only=dhcp_only)
+        result = self.collect_via_transport(
+            transport,
+            lightweight=lightweight,
+            dhcp_only=dhcp_only,
+            enabled_collectors=enabled_collectors,
+        )
         if isinstance(transport, SshTransport):
             result.meta["ssh_diag"] = {
                 k: v for k, v in transport.last_diag.items() if k != "host"

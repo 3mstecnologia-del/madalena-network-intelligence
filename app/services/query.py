@@ -154,6 +154,8 @@ class QueryService:
                     "records_seen": r.records_seen,
                     "records_created": r.records_created,
                     "records_updated": r.records_updated,
+                    "records_excluded": r.records_excluded,
+                    "parse_failures": r.parse_failures,
                     "commands_ok": r.commands_ok,
                     "commands_failed": r.commands_failed,
                     "error_summary": r.error_summary,

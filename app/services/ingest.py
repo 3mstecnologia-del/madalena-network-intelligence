@@ -28,6 +28,7 @@ from app.models.entities import (
     OltMacObservation,
     OltOnu,
 )
+from app.services.policy import apply_policy, load_policy
 from collectors.common.transport import sanitize_error
 from collectors.common.types import CollectorResult
 
@@ -84,6 +85,8 @@ class IngestService:
         seen: int = 0,
         created: int = 0,
         updated: int = 0,
+        excluded: int = 0,
+        parse_failures: int = 0,
         error: Optional[str] = None,
         completeness: Optional[str] = None,
         commands_ok: int = 0,
@@ -95,6 +98,8 @@ class IngestService:
         run.records_seen = seen
         run.records_created = created
         run.records_updated = updated
+        run.records_excluded = excluded
+        run.parse_failures = parse_failures
         run.error_summary = sanitize_error(error) if error else None
         if completeness is not None:
             run.completeness = completeness
@@ -118,6 +123,13 @@ class IngestService:
         run_id = run.id if run else None
         self._mac_rows = {}
         self._ip_rows = {}
+
+        device = self.db.get(Device, device_id)
+        if device is not None and device.tenant_id == tenant_id:
+            rules = load_policy(self.db, tenant_id, device)
+        else:
+            rules = load_policy(self.db, tenant_id, None)
+        result, excluded = apply_policy(result, rules)
 
         if result.identity:
             self._apply_identity(tenant_id, device_id, result.identity)
@@ -175,7 +187,7 @@ class IngestService:
             updated += u
 
         self.db.flush()
-        return {"seen": seen, "created": created, "updated": updated}
+        return {"seen": seen, "created": created, "updated": updated, "excluded": excluded}
 
     def _apply_identity(self, tenant_id: UUID, device_id: UUID, identity) -> None:
         device = self.db.get(Device, device_id)

@@ -1,5 +1,5 @@
 # All targets wrap Docker — no host Python/pip required.
-.PHONY: build up down logs migrate test lint format config seed secret-scan private-data-scan test-persist lab-collect lab-validate lab-diag
+.PHONY: build up down logs migrate test lint format config seed secret-scan private-data-scan test-persist lab-collect lab-validate lab-diag bootstrap validate-deploy
 
 build:
 	docker compose build
@@ -17,7 +17,7 @@ migrate:
 	docker compose run --rm -v "$(CURDIR):/app" migrate
 
 test:
-	docker compose run --rm --no-deps api pytest -q
+	docker compose run --rm --no-deps -v "$(CURDIR):/app" api pytest -q
 
 lint:
 	docker compose run --rm --no-deps api ruff check .
@@ -32,10 +32,18 @@ seed:
 	docker compose run --rm api python -m scripts.seed_lab
 
 secret-scan:
-	docker compose run --rm --no-deps api python -m scripts.secret_scan
+	docker compose run --rm --no-deps -v "$(CURDIR):/app" api python -m scripts.secret_scan
 
 private-data-scan:
-	python3 -m scripts.private_data_scan
+	docker compose run --rm --no-deps -v "$(CURDIR):/app" api python -m scripts.private_data_scan
+
+bootstrap:
+	chmod +x scripts/bootstrap.sh scripts/validate-deployment.sh
+	./scripts/bootstrap.sh
+
+validate-deploy:
+	chmod +x scripts/validate-deployment.sh
+	./scripts/validate-deployment.sh
 
 test-persist:
 	docker compose up -d db

@@ -13,6 +13,7 @@ from uuid import UUID
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -20,7 +21,7 @@ from app.core.db import SessionLocal
 from app.core.mac import normalize_mac
 from app.services.query import QueryService
 
-app = FastAPI(title="Madalena NI MCP Tools", version="0.2.0")
+app = FastAPI(title="Madalena NI MCP Tools", version="0.3.0")
 
 
 class ToolRequest(BaseModel):
@@ -38,6 +39,16 @@ def _db() -> Session:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "madalena-ni-mcp"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    db = _db()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok", "service": "madalena-ni-mcp", "database": "ok"}
+    finally:
+        db.close()
 
 
 @app.get("/tools")
@@ -248,7 +259,7 @@ def get_collection_status(body: ToolRequest) -> dict[str, Any]:
             raise HTTPException(404, str(exc)) from exc
         lines = [
             f"{r['collector_type']} {r['status']} completeness={r['completeness']} "
-            f"seen={r['records_seen']} freshness_s={r['freshness_seconds']}"
+            f"seen={r['records_seen']} excluded={r.get('records_excluded', 0)}"
             for r in status.get("runs", [])
         ]
         return {

@@ -29,6 +29,8 @@ class DeviceOut(BaseModel):
     vendor: Optional[str] = None
     model: Optional[str] = None
     enabled: bool
+    collectors_enabled: Optional[str] = None
+    collection_interval_sec: Optional[int] = None
     last_identity: Optional[str] = None
     last_version: Optional[str] = None
     last_observed_at: Optional[datetime] = None
@@ -56,6 +58,8 @@ class CollectionRunOut(BaseModel):
     records_seen: int
     records_created: int
     records_updated: int
+    records_excluded: int = 0
+    parse_failures: int = 0
     commands_ok: int = 0
     commands_failed: int = 0
     error_summary: Optional[str] = None

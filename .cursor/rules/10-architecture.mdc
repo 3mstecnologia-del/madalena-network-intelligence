@@ -13,6 +13,7 @@ runtime configuration
   → collector
   → parser
   → normalization / domain
+  → policy filter
   → persistence
   → correlation / query
   → API / MCP
@@ -24,6 +25,7 @@ runtime configuration
 | **Collector** | Orchestrate **allowlisted** reads; classify completeness | Contain API/MCP/query logic; accept arbitrary commands from API, MCP, DB, or tenant config |
 | **Parser** | Turn raw text into structures; tolerate **explicitly** known layouts | Do network I/O; mutate devices; treat malformed input as a reason to retry with a write |
 | **Domain** | Canonical MAC/IP/interface IDs; observation semantics; provenance | Encode a named customer's topology |
+| **Policy** | Drop out-of-scope observations (VLAN/CIDR/source/collector/interface) | Persist first and hide later in the API |
 | **Persistence** | Store facts + time; upsert without deleting history | Silently decide “the truth” when evidence conflicts |
 | **Correlation** | Join evidence; expose ambiguity | Invent certainty; hide conflicting observations |
 | **API / MCP** | Expose the query layer | Reimplement correlation in a second copy |

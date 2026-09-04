@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
@@ -20,13 +21,19 @@ from app.services.query import QueryService
 
 app = FastAPI(
     title="Madalena Network Intelligence",
-    version="0.2.0",
+    version="0.3.0",
     description="Multi-tenant network inventory and MAC/IP/ONU correlation API",
 )
 
 
 @app.get("/health", response_model=HealthOut)
 def health() -> HealthOut:
+    return HealthOut(status="ok")
+
+
+@app.get("/ready", response_model=HealthOut)
+def ready(db: Session = Depends(get_db)) -> HealthOut:
+    db.execute(text("SELECT 1"))
     return HealthOut(status="ok")
 
 

@@ -64,6 +64,8 @@ class Device(Base):
     model: Mapped[Optional[str]] = mapped_column(String(128))
     management_host_ref: Mapped[Optional[str]] = mapped_column(String(255))  # placeholder ref, not a secret
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    collectors_enabled: Mapped[Optional[str]] = mapped_column(Text)
+    collection_interval_sec: Mapped[Optional[int]] = mapped_column(Integer)
     last_identity: Mapped[Optional[str]] = mapped_column(String(255))
     last_version: Mapped[Optional[str]] = mapped_column(String(128))
     last_observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -175,7 +177,24 @@ class CollectionRun(Base):
     records_seen: Mapped[int] = mapped_column(Integer, default=0)
     records_created: Mapped[int] = mapped_column(Integer, default=0)
     records_updated: Mapped[int] = mapped_column(Integer, default=0)
+    records_excluded: Mapped[int] = mapped_column(Integer, default=0)
+    parse_failures: Mapped[int] = mapped_column(Integer, default=0)
     error_summary: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class ExclusionPolicy(Base):
+    """Runtime exclusion: drop matching observations before persist. No customer values in Git."""
+
+    __tablename__ = "exclusion_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    site_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("sites.id"))
+    device_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("devices.id"))
+    rule_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    rule_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DhcpLease(Base):
