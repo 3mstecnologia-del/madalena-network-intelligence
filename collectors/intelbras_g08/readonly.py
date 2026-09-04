@@ -8,7 +8,7 @@ G08_FAMILY = "intelbras-g08"
 G08_MAC_TABLE_COMMAND = "show ont mac-address-table interface gpon all"
 
 G08_READ_ALLOWLIST: tuple[str, ...] = (
-    "show ont mac-address-table",
+    G08_MAC_TABLE_COMMAND,
 )
 
 G08_MAC_COMMANDS: tuple[tuple[str, str], ...] = (

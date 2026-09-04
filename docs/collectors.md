@@ -12,7 +12,7 @@ Read-only: MikroTik collection never issues `add` / `set` / `remove` / `enable` 
 
 1. Scheduler selects enabled devices of a type.
 2. `IngestService.start_run` records tenant/site/device/version.
-3. Collector runs allowlisted read commands (light or full).
+3. Collector runs exact allowlisted read commands (light or full). Suffixes, chaining, and extra modifiers are rejected.
 4. Successful command outputs are parsed and ingested. Failed commands increment `commands_failed` and mark completeness `partial` or `none`.
 5. `finish_run` stores counts, sanitized errors, completeness. Commit. Prior observations remain.
 

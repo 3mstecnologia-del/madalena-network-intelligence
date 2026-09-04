@@ -4,7 +4,8 @@ Collectors must never issue add/set/remove/enable/disable/move.
 Parser failures must not trigger a fallback mutable command.
 """
 
-# Exact prefixes accepted by ReadOnlyTransport (RouterOS 7 print/get style).
+# Exact commands accepted by ReadOnlyTransport (RouterOS 7 print/get style).
+# Modifiers such as without-paging must be listed; suffixes are not implied.
 MIKROTIK_READ_ALLOWLIST: tuple[str, ...] = (
     "/system identity print",
     "/system resource print",
@@ -14,6 +15,7 @@ MIKROTIK_READ_ALLOWLIST: tuple[str, ...] = (
     "/ip arp print detail",
     "/ip dhcp-server lease print",
     "/ip dhcp-server lease print detail",
+    "/ip dhcp-server lease print detail without-paging",
     "/interface bridge host print",
     "/interface bridge host print detail",
     "/ip neighbor print",
