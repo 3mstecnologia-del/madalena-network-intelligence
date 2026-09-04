@@ -68,9 +68,9 @@ NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts
 
 Do not set `NI_SSH_MISSING_HOST_KEY=accept-new`. If the mounted file is empty, SSH collection will fail until the trusted keys are present.
 
-## 4c. UniFi TLS
+## 4c. UniFi TLS CA
 
-Default: TLS verification **on**. Prefer a mounted CA/chain:
+TLS verification stays **on**. If the Integration API uses a private CA, put the PEM chain on the VPS and tell the container:
 
 ```bash
 # .env (private)
@@ -78,16 +78,7 @@ NI_TRUST_DIR=/etc/madalena-ni/tls
 NI_TLS_CA_FILE=/run/tls/unifi-ca.pem
 ```
 
-Place `unifi-ca.pem` inside `NI_TRUST_DIR`.
-
-Lab exception (UniFi collector only): if the Integration API cannot present a hostname/CA that verifies, set the device prefix explicitly:
-
-```bash
-# .env (private) — UniFi device prefix only; does not affect SSH or other collectors
-{PREFIX}_VERIFY_TLS=false
-```
-
-This is a deliberate operational exception. The collector logs a sanitized warning and does not log the URL or API key. Do not set a global TLS-off flag.
+Place `unifi-ca.pem` inside `NI_TRUST_DIR`. Do not set `{PREFIX}_VERIFY_TLS=false`.
 
 ## 5. Docker Compose
 
@@ -172,8 +163,7 @@ If this upgrade includes SSH known_hosts / UniFi CA support, **before** recreate
 1. Write the trusted OpenSSH `known_hosts` to `/etc/madalena-ni/known_hosts` (or another private path).
 2. Add to private `.env`: `NI_SSH_KNOWN_HOSTS_FILE=/etc/madalena-ni/known_hosts` and `NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts`.
 3. If UniFi TLS uses a private CA: put `unifi-ca.pem` in `/etc/madalena-ni/tls/`, set `NI_TRUST_DIR=/etc/madalena-ni/tls` and `NI_TLS_CA_FILE=/run/tls/unifi-ca.pem`.
-4. Remove any `NI_SSH_MISSING_HOST_KEY=accept-new`.
-5. UniFi: keep verification on with `NI_TLS_CA_FILE` when possible; `{PREFIX}_VERIFY_TLS=false` is the documented UniFi-only lab exception.
+4. Remove any `NI_SSH_MISSING_HOST_KEY=accept-new` and `{PREFIX}_VERIFY_TLS=false`.
 
 Then:
 
