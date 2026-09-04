@@ -40,7 +40,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
       {prefix}_SITE       (optional UniFi site UUID)
       {prefix}_TLS_CA     (optional PEM CA/chain file for TLS verification)
       {prefix}_TLS_SERVER_NAME (DNS SAN used for TLS hostname checks when BASE_URL is an IP)
-      {prefix}_VERIFY_TLS (true|false, default true; prefer {prefix}_TLS_CA)
+      {prefix}_VERIFY_TLS (true|false, default true; UniFi-only lab exception when false)
     Global (Compose):
       NI_TLS_CA_FILE      (container path; used when per-prefix TLS_CA is unset)
       NI_SSH_KNOWN_HOSTS  (container path to SSH known_hosts; default /run/ssh/known_hosts)

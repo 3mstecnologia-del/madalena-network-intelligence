@@ -197,6 +197,7 @@ def test_known_hosts_loaded_with_reject_policy(tmp_path, monkeypatch):
     hosts.write_text("# synthetic placeholder\n", encoding="utf-8")
     monkeypatch.setenv("NI_SSH_KNOWN_HOSTS", str(hosts))
     monkeypatch.delenv("NI_SSH_MISSING_HOST_KEY", raising=False)
+    monkeypatch.setenv("MK_VERIFY_TLS", "false")
     seen: dict = {}
 
     class Client:

@@ -30,7 +30,7 @@ Madalena VPS: [`operations/madalena-deployment.md`](operations/madalena-deployme
 - G08: `ont_mac_table`
 - UniFi Network: `inventory`, `device_details`
 
-UniFi runtime keys (in addition to the SSH set when used): `{PREFIX}_BASE_URL`, `{PREFIX}_API_KEY`, optional `{PREFIX}_SITE`, optional `{PREFIX}_TLS_CA` (PEM), optional `{PREFIX}_TLS_SERVER_NAME` (DNS SAN when the URL host is an IP). Global `NI_TLS_CA_FILE` is the Compose-mounted CA path. The URL host should match a certificate SAN; if it cannot, pin `{PREFIX}_TLS_SERVER_NAME` to a SAN on that certificate. Do not set `{PREFIX}_VERIFY_TLS=false` for deploy.
+UniFi runtime keys (in addition to the SSH set when used): `{PREFIX}_BASE_URL`, `{PREFIX}_API_KEY`, optional `{PREFIX}_SITE`, optional `{PREFIX}_TLS_CA` (PEM), optional `{PREFIX}_TLS_SERVER_NAME` (DNS SAN when verification is on and the URL host is an IP). Global `NI_TLS_CA_FILE` is the Compose-mounted CA path. Default `{PREFIX}_VERIFY_TLS=true`. Setting `{PREFIX}_VERIFY_TLS=false` is a UniFi-collector-only lab exception; it does not disable TLS for SSH or other collectors, and it does not require CA or `TLS_SERVER_NAME`.
 
 SSH: `NI_SSH_KNOWN_HOSTS` (container path, default `/run/ssh/known_hosts`) plus Compose bind `NI_SSH_KNOWN_HOSTS_FILE` on the host. Unknown host keys are rejected.
 

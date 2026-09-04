@@ -68,26 +68,26 @@ NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts
 
 Do not set `NI_SSH_MISSING_HOST_KEY=accept-new`. If the mounted file is empty, SSH collection will fail until the trusted keys are present.
 
-## 4c. UniFi TLS CA
+## 4c. UniFi TLS
 
-TLS verification stays **on**. If the Integration API uses a private CA, put the PEM chain on the VPS and tell the container:
+Default: TLS verification **on**. Optional mounted CA/chain and `{PREFIX}_TLS_SERVER_NAME` apply only while verification stays on:
 
 ```bash
 # .env (private)
 NI_TRUST_DIR=/etc/madalena-ni/tls
 NI_TLS_CA_FILE=/run/tls/unifi-ca.pem
+# optional when BASE_URL is an IP and the certificate has DNS SANs:
+# {PREFIX}_TLS_SERVER_NAME=unifi.example.invalid
 ```
 
-Place `unifi-ca.pem` inside `NI_TRUST_DIR`. Do not set `{PREFIX}_VERIFY_TLS=false`.
-
-The Integration API URL host must match a certificate SAN. Prefer a DNS name in `{PREFIX}_BASE_URL`. If the API is only reachable by IP while the certificate has DNS SANs, keep verification on and set:
+Lab exception (UniFi collector / that device prefix only): this laboratory does not require a verifiable UniFi CA/SAN. Set explicitly:
 
 ```bash
-# .env (private) — DNS name that appears on the certificate (not an IP)
-{PREFIX}_TLS_SERVER_NAME=unifi.example.invalid
+# .env (private) — UniFi device prefix only; does not affect SSH or other collectors
+{PREFIX}_VERIFY_TLS=false
 ```
 
-TCP still uses `{PREFIX}_BASE_URL`. TLS verifies the CA and that SAN. Do not disable hostname checks.
+That wins over CA and `TLS_SERVER_NAME`. The collector logs a sanitized warning and does not log the URL or API key. Do not set a global TLS-off flag. MikroTik SSH still requires `known_hosts`.
 
 ## 5. Docker Compose
 
@@ -180,8 +180,8 @@ If this upgrade includes SSH known_hosts / UniFi CA support, **before** recreate
 1. Write the trusted OpenSSH `known_hosts` to `/etc/madalena-ni/known_hosts` (or another private path).
 2. Add to private `.env`: `NI_SSH_KNOWN_HOSTS_FILE=/etc/madalena-ni/known_hosts` and `NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts`.
 3. If UniFi TLS uses a private CA: put `unifi-ca.pem` in `/etc/madalena-ni/tls/`, set `NI_TRUST_DIR=/etc/madalena-ni/tls` and `NI_TLS_CA_FILE=/run/tls/unifi-ca.pem`.
-4. Remove any `NI_SSH_MISSING_HOST_KEY=accept-new` and `{PREFIX}_VERIFY_TLS=false`.
-5. UniFi: if `BASE_URL` is an IP and the certificate has DNS SANs, set `{PREFIX}_TLS_SERVER_NAME` to that DNS SAN. Keep `NI_TLS_CA_FILE`.
+4. Remove any `NI_SSH_MISSING_HOST_KEY=accept-new`.
+5. UniFi: `{PREFIX}_VERIFY_TLS=false` is the approved UniFi-only lab exception. Optional `NI_TLS_CA_FILE` / `{PREFIX}_TLS_SERVER_NAME` are unused while that exception is set.
 
 Then:
 
