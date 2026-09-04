@@ -66,7 +66,8 @@ wait_http "$MCP_URL/health" "MCP /health"
 wait_http "$MCP_URL/ready" "MCP /ready (database)"
 curl -sf "$MCP_URL/tools" >/dev/null || fail "MCP /tools"
 
-docker compose exec -T db pg_isready >/dev/null || fail "PostgreSQL not ready"
+docker compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  >/dev/null || fail "PostgreSQL not ready"
 docker compose exec -T scheduler python -c "from scheduler.main import heartbeat_fresh; import sys; sys.exit(0 if heartbeat_fresh() else 1)" \
   || fail "scheduler heartbeat stale"
 

@@ -289,7 +289,10 @@ class TopologyCorrelator:
             is_current = _as_utc(row.last_seen) == _as_utc(latest[key])
             conflicts: list[dict] = []
             status = STATUS_UNRESOLVED
-            if kind == STATUS_CONFLICTING:
+            if remote_id == row.local_device_id:
+                status = STATUS_CONFLICTING
+                conflicts.append({"kind": "self_link"})
+            elif kind == STATUS_CONFLICTING:
                 status = STATUS_CONFLICTING
                 conflicts.append({"kind": evidence[0] if evidence else "conflict"})
             elif is_current and len(current_remotes.get(key, set())) > 1:
