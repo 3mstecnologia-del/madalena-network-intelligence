@@ -34,6 +34,8 @@ class DeviceOut(BaseModel):
     last_identity: Optional[str] = None
     last_version: Optional[str] = None
     last_observed_at: Optional[datetime] = None
+    chassis_mac: Optional[str] = None
+    source_ref: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

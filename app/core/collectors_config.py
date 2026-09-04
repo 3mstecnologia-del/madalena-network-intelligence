@@ -10,6 +10,7 @@ from app.models.entities import Device
 DEFAULT_COLLECTORS: dict[str, tuple[str, ...]] = {
     "mikrotik": ("identity", "dhcp", "arp", "fdb", "interfaces", "neighbors"),
     "intelbras_g08": ("ont_mac_table",),
+    "unifi_network": ("inventory", "device_details"),
 }
 
 

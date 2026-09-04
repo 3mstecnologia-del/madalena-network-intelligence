@@ -57,6 +57,7 @@ def main() -> None:
         ensure_device("LAB-MK", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK")
         ensure_device("LAB-MK-B", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK_B")
         ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_EXAMPLE_OLT")
+        ensure_device("LAB-UNIFI", "unifi_network", "Ubiquiti", "UniFi-Network", "DEVICE_EXAMPLE_UNIFI")
 
         vlan_raw = (settings.seed_exclude_vlan or "").strip()
         if vlan_raw:
@@ -80,6 +81,7 @@ def main() -> None:
         for code, name, ctype in [
             ("mikrotik_dhcp", "MikroTik DHCP", "mikrotik"),
             ("intelbras_g08_mac", "Intelbras G08 MAC", "intelbras_g08"),
+            ("unifi_network", "UniFi Network", "unifi_network"),
         ]:
             ds = db.scalar(
                 select(DataSource).where(DataSource.tenant_id == tenant.id, DataSource.code == code)

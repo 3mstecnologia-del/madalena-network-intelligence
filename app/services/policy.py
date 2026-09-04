@@ -32,6 +32,9 @@ _SOURCE_COLLECTOR = {
     "mikrotik_interface": "interfaces",
     "mikrotik_neighbor": "neighbors",
     "olt": "ont_mac_table",
+    "unifi_inventory": "inventory",
+    "unifi_interface": "inventory",
+    "unifi_uplink": "inventory",
 }
 
 
@@ -195,6 +198,23 @@ def apply_policy(result: CollectorResult, rules: PolicyRules) -> tuple[Collector
     ):
         excluded += 1
         identity = None
+    inventory_nodes = [
+        x
+        for x in result.inventory_nodes
+        if keep_ip_iface_vlan(
+            ip=x.ip_address, source=x.source, collector="inventory"
+        )
+    ]
+    topology_links = [
+        x
+        for x in result.topology_links
+        if keep_ip_iface_vlan(
+            ip=x.remote_ip,
+            iface=x.local_interface,
+            source=x.source,
+            collector=_SOURCE_COLLECTOR.get(x.source, "neighbors"),
+        )
+    ]
 
     filtered = replace(
         result,
@@ -206,6 +226,8 @@ def apply_policy(result: CollectorResult, rules: PolicyRules) -> tuple[Collector
         olt_macs=olt_macs,
         onus=onus,
         identity=identity,
+        inventory_nodes=inventory_nodes,
+        topology_links=topology_links,
         meta=dict(result.meta),
     )
     filtered.meta["records_excluded"] = excluded

@@ -21,8 +21,8 @@ from app.services.query import QueryService
 
 app = FastAPI(
     title="Madalena Network Intelligence",
-    version="0.3.0",
-    description="Multi-tenant network inventory and MAC/IP/ONU correlation API",
+    version="0.4.0",
+    description="Multi-tenant network inventory, topology, and MAC/IP/ONU correlation API",
 )
 
 
@@ -68,6 +68,63 @@ def get_device(
     if device is None:
         raise HTTPException(status_code=404, detail="device not found")
     return device
+
+
+@app.get("/devices/{device_id}/neighbors")
+def get_device_neighbors(
+    device_id: UUID,
+    tenant: str = Query(...),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        data = QueryService(db).device_neighbors(tenant, device_id, limit=limit, offset=offset)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not data.get("found"):
+        raise HTTPException(status_code=404, detail="device not found")
+    return data
+
+
+@app.get("/devices/{device_id}/links")
+def get_device_links(
+    device_id: UUID,
+    tenant: str = Query(...),
+    include_history: bool = Query(False),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        data = QueryService(db).device_links(
+            tenant,
+            device_id,
+            include_history=include_history,
+            limit=limit,
+            offset=offset,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not data.get("found"):
+        raise HTTPException(status_code=404, detail="device not found")
+    return data
+
+
+@app.get("/topology")
+def get_topology(
+    tenant: str = Query(...),
+    include_history: bool = Query(False),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        return QueryService(db).get_topology(
+            tenant, include_history=include_history, limit=limit, offset=offset
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/macs", response_model=list[MacListItem])

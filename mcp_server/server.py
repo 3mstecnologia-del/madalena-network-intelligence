@@ -21,7 +21,7 @@ from app.core.db import SessionLocal
 from app.core.mac import normalize_mac
 from app.services.query import QueryService
 
-app = FastAPI(title="Madalena NI MCP Tools", version="0.3.0")
+app = FastAPI(title="Madalena NI MCP Tools", version="0.4.0")
 
 
 class ToolRequest(BaseModel):
@@ -30,6 +30,8 @@ class ToolRequest(BaseModel):
     ip: Optional[str] = None
     device_id: Optional[UUID] = None
     limit: int = 50
+    offset: int = 0
+    include_history: bool = False
 
 
 def _db() -> Session:
@@ -62,6 +64,9 @@ def list_tools() -> dict[str, Any]:
             {"name": "list_tenant_network_assets", "params": ["tenant", "limit?"]},
             {"name": "get_mac_history", "params": ["tenant", "mac"]},
             {"name": "get_collection_status", "params": ["tenant", "limit?"]},
+            {"name": "get_device_neighbors", "params": ["tenant", "device_id", "limit?"]},
+            {"name": "get_device_links", "params": ["tenant", "device_id", "include_history?", "limit?"]},
+            {"name": "get_topology", "params": ["tenant", "include_history?", "limit?"]},
         ]
     }
 
@@ -267,6 +272,95 @@ def get_collection_status(body: ToolRequest) -> dict[str, Any]:
             "text": "\n".join(lines) or "no runs",
             "data": status,
         }
+    finally:
+        db.close()
+
+
+def _compact_topology(data: dict) -> str:
+    counts = data.get("counts") or {}
+    lines = [
+        f"topology tenant={data.get('tenant')} "
+        f"confirmed={counts.get('confirmed', 0)} "
+        f"unilateral={counts.get('unilateral', 0)} "
+        f"conflicting={counts.get('conflicting', 0)} "
+        f"unresolved={counts.get('unresolved', 0)}"
+    ]
+    for link in data.get("links") or []:
+        remote = link.get("remote_device") or link.get("remote_identity") or link.get("remote_mac") or "?"
+        lines.append(
+            f"{link.get('local_device')} {link.get('local_interface') or '?'} → "
+            f"{remote} {link.get('remote_interface') or ''} "
+            f"[{link.get('status')} {link.get('protocol') or link.get('source')}]"
+        )
+    return "\n".join(lines)
+
+
+@app.post("/tools/get_device_neighbors")
+def get_device_neighbors(body: ToolRequest) -> dict[str, Any]:
+    if not body.device_id:
+        raise HTTPException(400, "device_id required")
+    db = _db()
+    try:
+        qs = QueryService(db)
+        try:
+            data = qs.device_neighbors(
+                body.tenant, body.device_id, limit=body.limit, offset=body.offset
+            )
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not data.get("found"):
+            return {"ok": False, "text": "device not found", "data": data}
+        rows = data.get("neighbors") or []
+        lines = [f"{data.get('device')} neighbors={len(rows)}"]
+        for row in rows:
+            lines.append(
+                f"{row.get('local_interface')} → {row.get('remote_identity') or row.get('remote_mac')} "
+                f"proto={row.get('protocol')} match={row.get('match')}"
+            )
+        return {"ok": True, "text": "\n".join(lines), "data": data}
+    finally:
+        db.close()
+
+
+@app.post("/tools/get_device_links")
+def get_device_links(body: ToolRequest) -> dict[str, Any]:
+    if not body.device_id:
+        raise HTTPException(400, "device_id required")
+    db = _db()
+    try:
+        qs = QueryService(db)
+        try:
+            data = qs.device_links(
+                body.tenant,
+                body.device_id,
+                include_history=body.include_history,
+                limit=body.limit,
+                offset=body.offset,
+            )
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not data.get("found"):
+            return {"ok": False, "text": "device not found", "data": data}
+        return {"ok": True, "text": _compact_topology(data), "data": data}
+    finally:
+        db.close()
+
+
+@app.post("/tools/get_topology")
+def get_topology(body: ToolRequest) -> dict[str, Any]:
+    db = _db()
+    try:
+        qs = QueryService(db)
+        try:
+            data = qs.get_topology(
+                body.tenant,
+                include_history=body.include_history,
+                limit=body.limit,
+                offset=body.offset,
+            )
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"ok": True, "text": _compact_topology(data), "data": data}
     finally:
         db.close()
 

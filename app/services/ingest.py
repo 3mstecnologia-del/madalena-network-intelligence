@@ -21,12 +21,14 @@ from app.models.entities import (
     Device,
     DhcpLease,
     Interface,
+    InventoryNodeObservation,
     IpAddress,
     MacAddress,
     MacObservation,
     NeighborObservation,
     OltMacObservation,
     OltOnu,
+    TopologyObservation,
 )
 from app.services.policy import apply_policy, load_policy
 from collectors.common.transport import sanitize_error
@@ -134,9 +136,27 @@ class IngestService:
         if result.identity:
             self._apply_identity(tenant_id, device_id, result.identity)
 
+        for node in result.inventory_nodes:
+            seen += 1
+            if node.mac:
+                self._touch_mac(tenant_id, node.mac, node.observed_at)
+            if node.ip_address:
+                self._touch_ip(tenant_id, node.ip_address, node.observed_at)
+            c, u = self._upsert_inventory(tenant_id, device_id, node, run_id)
+            created += c
+            updated += u
+        if result.inventory_nodes:
+            self.db.flush()
+
         for iface in result.interfaces:
             seen += 1
-            c, u = self._upsert_interface(tenant_id, device_id, iface)
+            owner_id = device_id
+            owner_ref = getattr(iface, "owner_source_id", None)
+            if owner_ref:
+                owner = self._device_by_source_ref(tenant_id, owner_ref)
+                if owner is not None:
+                    owner_id = owner.id
+            c, u = self._upsert_interface(tenant_id, owner_id, iface)
             created += c
             updated += u
 
@@ -170,6 +190,16 @@ class IngestService:
             if neighbor.ip_address:
                 self._touch_ip(tenant_id, neighbor.ip_address, neighbor.observed_at)
             c, u = self._upsert_neighbor(tenant_id, device_id, neighbor, run_id)
+            created += c
+            updated += u
+
+        for link in result.topology_links:
+            seen += 1
+            if link.remote_mac:
+                self._touch_mac(tenant_id, link.remote_mac, link.observed_at)
+            if link.remote_ip:
+                self._touch_ip(tenant_id, link.remote_ip, link.observed_at)
+            c, u = self._upsert_topology(tenant_id, device_id, link, run_id)
             created += c
             updated += u
 
@@ -389,6 +419,7 @@ class IngestService:
                 NeighborObservation.ip_address == neighbor.ip_address,
                 NeighborObservation.interface == neighbor.interface,
                 NeighborObservation.identity == neighbor.identity,
+                NeighborObservation.protocol == getattr(neighbor, "protocol", None),
             )
         )
         if row is None:
@@ -399,8 +430,11 @@ class IngestService:
                     mac=neighbor.mac,
                     ip_address=neighbor.ip_address,
                     interface=neighbor.interface,
+                    remote_interface=neighbor.remote_interface,
                     identity=neighbor.identity,
                     platform=neighbor.platform,
+                    protocol=getattr(neighbor, "protocol", None),
+                    version=getattr(neighbor, "version", None),
                     first_seen=neighbor.observed_at,
                     last_seen=neighbor.observed_at,
                     observed_at=neighbor.observed_at,
@@ -410,6 +444,9 @@ class IngestService:
             )
             return 1, 0
         row.platform = neighbor.platform or row.platform
+        row.remote_interface = neighbor.remote_interface or row.remote_interface
+        row.protocol = getattr(neighbor, "protocol", None) or row.protocol
+        row.version = getattr(neighbor, "version", None) or row.version
         row.last_seen = neighbor.observed_at
         row.observed_at = neighbor.observed_at
         row.collection_run_id = run_id
@@ -483,6 +520,222 @@ class IngestService:
         row.source = om.source or row.source
         row.last_seen = om.observed_at
         row.observed_at = om.observed_at
+        row.collection_run_id = run_id
+        self.db.add(row)
+        return 0, 1
+
+    def _device_by_source_ref(self, tenant_id, source_ref: str) -> Optional[Device]:
+        return self.db.scalar(
+            select(Device).where(Device.tenant_id == tenant_id, Device.source_ref == source_ref)
+        )
+
+    def _devices_for_mac(self, tenant_id, mac: str) -> list[Device]:
+        ids: set = set()
+        for device in self.db.scalars(
+            select(Device).where(Device.tenant_id == tenant_id, Device.chassis_mac == mac)
+        ):
+            ids.add(device.id)
+        for iface in self.db.scalars(
+            select(Interface).where(Interface.tenant_id == tenant_id, Interface.mac == mac)
+        ):
+            ids.add(iface.device_id)
+        found: list[Device] = []
+        for did in ids:
+            device = self.db.get(Device, did)
+            if device is not None and device.tenant_id == tenant_id:
+                found.append(device)
+        return found
+
+    def _unique_device_name(self, site_id, preferred: str) -> str:
+        name = (preferred or "unifi-node")[:128]
+        exists = self.db.scalar(select(Device).where(Device.site_id == site_id, Device.name == name))
+        if exists is None:
+            return name
+        for i in range(2, 50):
+            candidate = f"{name[:120]}-{i}"
+            exists = self.db.scalar(
+                select(Device).where(Device.site_id == site_id, Device.name == candidate)
+            )
+            if exists is None:
+                return candidate
+        return f"{name[:100]}-{str(site_id)[:8]}"
+
+    def _match_or_create_inventory_device(self, tenant_id, controller_id, node) -> Optional[Device]:
+        controller = self.db.get(Device, controller_id)
+        if controller is None or controller.tenant_id != tenant_id:
+            return None
+        if node.source_id:
+            by_ref = self._device_by_source_ref(tenant_id, node.source_id)
+            if by_ref is not None:
+                self._apply_inventory_identity(by_ref, node)
+                return by_ref
+        if node.mac:
+            matches = self._devices_for_mac(tenant_id, node.mac)
+            if len(matches) == 1:
+                device = matches[0]
+                if node.source_id and not device.source_ref:
+                    device.source_ref = node.source_id
+                self._apply_inventory_identity(device, node)
+                return device
+            if len(matches) > 1:
+                return None
+        preferred = node.name or (f"unifi-{node.mac}" if node.mac else None) or node.source_id or "unifi-node"
+        device = Device(
+            tenant_id=tenant_id,
+            site_id=controller.site_id,
+            name=self._unique_device_name(controller.site_id, preferred),
+            device_type="unifi",
+            vendor="Ubiquiti",
+            model=node.model,
+            enabled=False,
+            chassis_mac=node.mac,
+            source_ref=node.source_id,
+            last_identity=node.name,
+            last_version=node.firmware,
+            last_observed_at=node.observed_at,
+        )
+        self.db.add(device)
+        self.db.flush()
+        return device
+
+    def _apply_inventory_identity(self, device: Device, node) -> None:
+        if node.mac and not device.chassis_mac:
+            device.chassis_mac = node.mac
+        if node.source_id and not device.source_ref:
+            device.source_ref = node.source_id
+        if node.model:
+            device.model = node.model
+        if node.name:
+            device.last_identity = node.name
+        if node.firmware:
+            device.last_version = node.firmware
+        device.last_observed_at = node.observed_at
+        self.db.add(device)
+
+    def _upsert_inventory(self, tenant_id, controller_id, node, run_id) -> tuple[int, int]:
+        observed = self._match_or_create_inventory_device(tenant_id, controller_id, node)
+        filters = [
+            InventoryNodeObservation.tenant_id == tenant_id,
+            InventoryNodeObservation.controller_device_id == controller_id,
+        ]
+        if node.source_id:
+            filters.append(InventoryNodeObservation.source_id == node.source_id)
+        elif node.mac:
+            filters.append(InventoryNodeObservation.mac == node.mac)
+        else:
+            filters.append(InventoryNodeObservation.name == node.name)
+        row = self.db.scalar(select(InventoryNodeObservation).where(*filters))
+        if row is None:
+            self.db.add(
+                InventoryNodeObservation(
+                    tenant_id=tenant_id,
+                    controller_device_id=controller_id,
+                    observed_device_id=observed.id if observed else None,
+                    source_id=node.source_id,
+                    name=node.name,
+                    mac=node.mac,
+                    ip_address=node.ip_address,
+                    model=node.model,
+                    category=node.category,
+                    state=node.state,
+                    firmware=node.firmware,
+                    uplink_source_id=node.uplink_source_id,
+                    first_seen=node.observed_at,
+                    last_seen=node.observed_at,
+                    observed_at=node.observed_at,
+                    source=node.source,
+                    collection_run_id=run_id,
+                )
+            )
+            return 1, 0
+        row.observed_device_id = observed.id if observed else row.observed_device_id
+        row.name = node.name or row.name
+        row.mac = node.mac or row.mac
+        row.ip_address = node.ip_address or row.ip_address
+        row.model = node.model or row.model
+        row.category = node.category or row.category
+        row.state = node.state or row.state
+        row.firmware = node.firmware or row.firmware
+        row.uplink_source_id = node.uplink_source_id or row.uplink_source_id
+        row.last_seen = node.observed_at
+        row.observed_at = node.observed_at
+        row.collection_run_id = run_id
+        self.db.add(row)
+        return 0, 1
+
+    def _resolve_local_device(self, tenant_id, collector_id, link) -> Device:
+        if getattr(link, "local_source_id", None):
+            found = self._device_by_source_ref(tenant_id, link.local_source_id)
+            if found is not None:
+                return found
+        if getattr(link, "local_mac", None):
+            matches = self._devices_for_mac(tenant_id, link.local_mac)
+            if len(matches) == 1:
+                return matches[0]
+        device = self.db.get(Device, collector_id)
+        if device is None:
+            raise LookupError("collector device missing")
+        return device
+
+    def _hint_remote_device_id(self, tenant_id, link):
+        if link.remote_mac:
+            matches = self._devices_for_mac(tenant_id, link.remote_mac)
+            if len(matches) == 1:
+                return matches[0].id
+            return None
+        if link.remote_source_id:
+            found = self._device_by_source_ref(tenant_id, link.remote_source_id)
+            return found.id if found else None
+        return None
+
+    def _upsert_topology(self, tenant_id, collector_id, link, run_id) -> tuple[int, int]:
+        local = self._resolve_local_device(tenant_id, collector_id, link)
+        filters = [
+            TopologyObservation.tenant_id == tenant_id,
+            TopologyObservation.local_device_id == local.id,
+            TopologyObservation.local_interface == link.local_interface,
+            TopologyObservation.source == link.source,
+            TopologyObservation.protocol == link.protocol,
+        ]
+        if link.remote_mac:
+            filters.append(TopologyObservation.remote_mac == link.remote_mac)
+        elif link.remote_source_id:
+            filters.append(TopologyObservation.remote_source_id == link.remote_source_id)
+        else:
+            filters.append(TopologyObservation.remote_identity == link.remote_identity)
+            filters.append(TopologyObservation.remote_mac.is_(None))
+        row = self.db.scalar(select(TopologyObservation).where(*filters))
+        remote_hint = self._hint_remote_device_id(tenant_id, link)
+        if row is None:
+            self.db.add(
+                TopologyObservation(
+                    tenant_id=tenant_id,
+                    site_id=local.site_id,
+                    local_device_id=local.id,
+                    local_interface=link.local_interface,
+                    remote_device_id=remote_hint,
+                    remote_interface=link.remote_interface,
+                    remote_identity=link.remote_identity,
+                    remote_mac=link.remote_mac,
+                    remote_ip=link.remote_ip,
+                    remote_source_id=link.remote_source_id,
+                    protocol=link.protocol,
+                    source=link.source,
+                    first_seen=link.observed_at,
+                    last_seen=link.observed_at,
+                    observed_at=link.observed_at,
+                    collection_run_id=run_id,
+                )
+            )
+            return 1, 0
+        if remote_hint:
+            row.remote_device_id = remote_hint
+        row.remote_interface = link.remote_interface or row.remote_interface
+        row.remote_identity = link.remote_identity or row.remote_identity
+        row.remote_ip = link.remote_ip or row.remote_ip
+        row.remote_source_id = link.remote_source_id or row.remote_source_id
+        row.last_seen = link.observed_at
+        row.observed_at = link.observed_at
         row.collection_run_id = run_id
         self.db.add(row)
         return 0, 1

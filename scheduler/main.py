@@ -26,6 +26,7 @@ from app.services.ingest import IngestService
 from collectors.common.transport import sanitize_error, sanitized_exception_message
 from collectors.intelbras_g08.collector import IntelbrasG08Collector
 from collectors.mikrotik.collector import MikroTikCollector
+from collectors.unifi.collector import UnifiNetworkCollector
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("scheduler")
@@ -125,9 +126,14 @@ def run_olt() -> None:
     _run_by_type("intelbras_g08", lightweight=True)
 
 
+def run_unifi() -> None:
+    _run_by_type("unifi_network", lightweight=False)
+
+
 def run_full_inventory() -> None:
     _run_by_type("mikrotik", lightweight=False)
     _run_by_type("intelbras_g08", lightweight=False)
+    _run_by_type("unifi_network", lightweight=False)
 
 
 def _run_by_type(device_type: str, lightweight: bool) -> None:
@@ -164,7 +170,11 @@ def _collect_one(db, ingest: IngestService, device: Device, device_type: str, li
     collectors = enabled_collectors(device)
     provider, prefix = _cred_prefix(db, device)
     collector_label = device_type + ("_light" if lightweight else "_full")
-    version = MikroTikCollector.collector_version if device_type == "mikrotik" else None
+    version = None
+    if device_type == "mikrotik":
+        version = MikroTikCollector.collector_version
+    elif device_type == "unifi_network":
+        version = UnifiNetworkCollector.collector_version
     run = ingest.start_run(
         tenant_id=device.tenant_id,
         collector_type=collector_label,
@@ -190,14 +200,38 @@ def _collect_one(db, ingest: IngestService, device: Device, device_type: str, li
         if device_type == "mikrotik":
             collector = MikroTikCollector(provider, prefix)
             result = collector.collect_live(lightweight=lightweight, enabled_collectors=collectors)
-        else:
+        elif device_type == "intelbras_g08":
             collector = IntelbrasG08Collector(provider, prefix)
             result = collector.collect_live(enabled_collectors=collectors)
+        elif device_type == "unifi_network":
+            collector = UnifiNetworkCollector(provider, prefix)
+            result = collector.collect_live(enabled_collectors=collectors)
+        else:
+            from collectors.common.types import CollectorResult
+
+            result = CollectorResult(
+                meta={
+                    "status": "skipped",
+                    "completeness": "none",
+                    "reason": "unknown_device_type",
+                    "collector_version": version,
+                }
+            )
+            _finish_from_meta(ingest, run, result, None)
+            db.commit()
+            return
         status = result.meta.get("status", "ok")
         stats = None
-        if status not in {"skipped", "not_implemented", "error"} or (
-            result.dhcp or result.arp or result.fdb or result.interfaces or result.neighbors
-        ):
+        has_rows = (
+            result.dhcp
+            or result.arp
+            or result.fdb
+            or result.interfaces
+            or result.neighbors
+            or result.topology_links
+            or result.inventory_nodes
+        )
+        if status not in {"skipped", "not_implemented", "error"} or has_rows:
             if status not in {"skipped", "not_implemented"}:
                 stats = ingest.ingest_result(
                     tenant_id=device.tenant_id,
@@ -252,6 +286,7 @@ def main() -> None:
     if once:
         run_mikrotik_lightweight()
         run_olt()
+        run_unifi()
         return
     _scheduler = BlockingScheduler(timezone="UTC")
     _scheduler.add_job(
@@ -271,6 +306,14 @@ def main() -> None:
         coalesce=True,
     )
     _scheduler.add_job(
+        run_unifi,
+        "interval",
+        seconds=settings.scheduler_unifi_interval_sec,
+        id="unifi",
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
         run_full_inventory,
         "interval",
         seconds=settings.scheduler_full_inventory_interval_sec,
@@ -281,9 +324,10 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
     log.info(
-        "scheduler started mikrotik=%ss olt=%ss full=%ss",
+        "scheduler started mikrotik=%ss olt=%ss unifi=%ss full=%ss",
         settings.scheduler_mikrotik_interval_sec,
         settings.scheduler_olt_interval_sec,
+        settings.scheduler_unifi_interval_sec,
         settings.scheduler_full_inventory_interval_sec,
     )
     run_mikrotik_lightweight()
