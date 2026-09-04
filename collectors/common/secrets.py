@@ -22,6 +22,7 @@ class DeviceSecrets:
     base_url: Optional[str] = None
     site: Optional[str] = None
     verify_tls: bool = True
+    tls_ca_file: Optional[str] = None
 
 
 def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[DeviceSecrets]:
@@ -36,7 +37,11 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
       {prefix}_BASE_URL   (UniFi Integration API root)
       {prefix}_API_KEY
       {prefix}_SITE       (optional UniFi site UUID)
-      {prefix}_VERIFY_TLS (true|false, default true)
+      {prefix}_TLS_CA     (optional PEM CA/chain file for TLS verification)
+      {prefix}_VERIFY_TLS (true|false, default true; prefer {prefix}_TLS_CA)
+    Global (Compose):
+      NI_TLS_CA_FILE      (container path; used when per-prefix TLS_CA is unset)
+      NI_SSH_KNOWN_HOSTS  (container path to SSH known_hosts; default /run/ssh/known_hosts)
     """
     if not secret_prefix:
         return None
@@ -50,6 +55,14 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
     site = os.getenv(f"{secret_prefix}_SITE") or None
     verify_raw = (os.getenv(f"{secret_prefix}_VERIFY_TLS") or "true").strip().lower()
     verify_tls = verify_raw not in {"0", "false", "no"}
+    tls_ca = (
+        os.getenv(f"{secret_prefix}_TLS_CA")
+        or os.getenv(f"{secret_prefix}_CA_FILE")
+        or os.getenv("NI_TLS_CA_FILE")
+        or None
+    )
+    if tls_ca:
+        tls_ca = tls_ca.strip() or None
     try:
         port = int(port_raw)
     except ValueError:
@@ -69,6 +82,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
             base_url=url or None,
             site=site,
             verify_tls=verify_tls,
+            tls_ca_file=tls_ca,
         )
 
     if not host or not user or not password:
@@ -81,4 +95,5 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
         protocol=protocol or "ssh",
         site=site,
         verify_tls=verify_tls,
+        tls_ca_file=tls_ca,
     )

@@ -24,8 +24,24 @@ SSH_STAGES = (
 )
 
 
+DEFAULT_KNOWN_HOSTS = "/run/ssh/known_hosts"
+
+
+def known_hosts_path() -> Optional[str]:
+    explicit = (os.getenv("NI_SSH_KNOWN_HOSTS") or "").strip()
+    if explicit:
+        return explicit
+    if os.path.isfile(DEFAULT_KNOWN_HOSTS):
+        return DEFAULT_KNOWN_HOSTS
+    return None
+
+
 def apply_host_key_policy(client) -> None:
-    """Default reject unknown keys. Lab may set NI_SSH_MISSING_HOST_KEY=accept-new."""
+    """Reject unknown host keys. Load a mounted known_hosts file when present.
+
+    Official deploy path: NI_SSH_KNOWN_HOSTS (default /run/ssh/known_hosts).
+    NI_SSH_MISSING_HOST_KEY=accept-new is not the supported deploy configuration.
+    """
     import paramiko
 
     policy = (os.getenv("NI_SSH_MISSING_HOST_KEY") or "reject").strip().lower()
@@ -33,10 +49,15 @@ def apply_host_key_policy(client) -> None:
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     else:
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
-        try:
-            client.load_system_host_keys()
-        except (OSError, AttributeError):
-            pass
+    path = known_hosts_path()
+    if path:
+        if not os.path.isfile(path):
+            raise TransportError("ssh known_hosts file missing", stage="SSH_HANDSHAKE")
+        client.load_host_keys(path)
+    try:
+        client.load_system_host_keys()
+    except (OSError, AttributeError):
+        pass
 
 
 class SshTransport:

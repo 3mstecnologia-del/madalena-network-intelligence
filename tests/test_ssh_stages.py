@@ -61,6 +61,9 @@ def test_ssh_uses_configured_custom_port(monkeypatch):
         def load_system_host_keys(self):
             return None
 
+        def load_host_keys(self, _path):
+            return None
+
     monkeypatch.setattr(paramiko, "SSHClient", FakeClient)
     transport = SshTransport(SECRETS, timeout_sec=5)
     with pytest.raises(TransportError) as exc:
@@ -104,6 +107,9 @@ def test_tcp_open_ssh_handshake_fails(monkeypatch):
             return None
 
         def load_system_host_keys(self):
+            return None
+
+        def load_host_keys(self, _path):
             return None
 
     monkeypatch.setattr(paramiko, "SSHClient", FakeClient)
@@ -180,3 +186,47 @@ def test_sanitize_error_strips_quoted_user_and_serial():
     assert "madalena" not in text
     assert "core.example" not in text
     assert "FHTT-c139d28f" not in text
+
+
+def test_known_hosts_loaded_with_reject_policy(tmp_path, monkeypatch):
+    import paramiko as real_paramiko
+
+    from collectors.mikrotik.transport_ssh import apply_host_key_policy
+
+    hosts = tmp_path / "known_hosts"
+    hosts.write_text("# synthetic placeholder\n", encoding="utf-8")
+    monkeypatch.setenv("NI_SSH_KNOWN_HOSTS", str(hosts))
+    monkeypatch.delenv("NI_SSH_MISSING_HOST_KEY", raising=False)
+    seen: dict = {}
+
+    class Client:
+        def set_missing_host_key_policy(self, policy):
+            seen["policy"] = type(policy).__name__
+
+        def load_host_keys(self, path):
+            seen["path"] = path
+
+        def load_system_host_keys(self):
+            seen["system"] = True
+
+    apply_host_key_policy(Client())
+    assert seen["policy"] == "RejectPolicy"
+    assert seen["path"] == str(hosts)
+    assert seen.get("system") is True
+    assert issubclass(real_paramiko.RejectPolicy, real_paramiko.MissingHostKeyPolicy)
+
+
+def test_known_hosts_missing_file_is_config_error(monkeypatch):
+    from collectors.mikrotik.transport_ssh import apply_host_key_policy
+
+    monkeypatch.setenv("NI_SSH_KNOWN_HOSTS", "/no/such/known_hosts")
+    monkeypatch.delenv("NI_SSH_MISSING_HOST_KEY", raising=False)
+
+    class Client:
+        def set_missing_host_key_policy(self, _p):
+            return None
+
+    with pytest.raises(TransportError) as exc:
+        apply_host_key_policy(Client())
+    assert exc.value.stage == "SSH_HANDSHAKE"
+    assert "known_hosts" in str(exc.value).lower()

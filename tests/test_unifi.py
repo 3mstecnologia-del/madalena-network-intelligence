@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from collectors.common.transport import ReadOnlyViolation, sanitize_error
+import pytest
+
+from collectors.common.transport import ReadOnlyViolation, TransportError, sanitize_error
 from collectors.unifi.collector import UnifiNetworkCollector
 from collectors.unifi.parsers import parse_device_list, parse_device_payload, parse_sites
 from collectors.unifi.readonly import unifi_get_allowed
@@ -74,3 +76,73 @@ def test_unifi_error_sanitizes_api_key():
     assert "super-secret-unifi-key" not in text
     assert "<REDACTED>" in text
     assert "10.30.2.1" not in text
+
+
+def test_unifi_tls_uses_ca_file_and_keeps_verification(tmp_path, monkeypatch):
+    from collectors.common.secrets import DeviceSecrets, resolve_secrets
+    from collectors.unifi.transport_http import UnifiHttpClient, tls_verify_setting
+
+    ca = tmp_path / "unifi-ca.pem"
+    ca.write_text("-----BEGIN CERTIFICATE-----\nMIIBsynthetic\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    secrets = DeviceSecrets(
+        base_url="https://unifi.example.invalid/integration",
+        api_key="k",
+        verify_tls=False,
+        tls_ca_file=str(ca),
+    )
+    assert tls_verify_setting(secrets) == str(ca)
+    captured: dict = {}
+
+    class FakeClient:
+        def __init__(self, timeout=None, verify=True):
+            captured["verify"] = verify
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url, params=None, headers=None):
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"applicationVersion": "10.4.57"}
+
+            return Resp()
+
+    monkeypatch.setattr("collectors.unifi.transport_http.httpx.Client", FakeClient)
+    UnifiHttpClient(secrets).get_json("/v1/info")
+    assert captured["verify"] == str(ca)
+    assert captured["verify"] is not False
+
+    monkeypatch.setenv("U_API_KEY", "k")
+    monkeypatch.setenv("U_BASE_URL", "https://unifi.example.invalid/integration")
+    monkeypatch.setenv("NI_TLS_CA_FILE", str(ca))
+    resolved = resolve_secrets("env", "U")
+    assert resolved is not None
+    assert resolved.tls_ca_file == str(ca)
+    assert tls_verify_setting(resolved) == str(ca)
+
+
+def test_unifi_tls_missing_ca_file_is_config_error(tmp_path):
+    from collectors.common.secrets import DeviceSecrets
+    from collectors.unifi.transport_http import tls_verify_setting
+
+    secrets = DeviceSecrets(
+        base_url="https://unifi.example.invalid/integration",
+        api_key="k",
+        tls_ca_file=str(tmp_path / "missing.pem"),
+    )
+    with pytest.raises(TransportError) as exc:
+        tls_verify_setting(secrets)
+    assert "tls ca" in str(exc.value).lower()
+
+
+def test_unifi_tls_default_verifies():
+    from collectors.common.secrets import DeviceSecrets
+    from collectors.unifi.transport_http import tls_verify_setting
+
+    secrets = DeviceSecrets(base_url="https://unifi.example.invalid/integration", api_key="k")
+    assert tls_verify_setting(secrets) is True

@@ -27,6 +27,8 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 
 Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`. Per-device `collectors_enabled` selects which command groups run (a fleet member may omit `dhcp`).
 
+SSH host-key checking is reject-unknown. Deploy mounts a trusted `known_hosts` at `/run/ssh/known_hosts` (`NI_SSH_KNOWN_HOSTS`). Do not use `NI_SSH_MISSING_HOST_KEY=accept-new` as the supported configuration.
+
 Neighbor fields are optional. Missing identity, remote interface, protocol, or version is not an error. Neighbors also produce `topology_links` (observations, not correlated truth).
 
 Tests must use `MemoryTransport` or `collect_from_texts`.
@@ -38,7 +40,8 @@ Read-only HTTP GET against the documented Integration API (`X-API-Key`). Runtime
 - `{PREFIX}_BASE_URL` — Integration root (no hostname hardcoded)
 - `{PREFIX}_API_KEY`
 - `{PREFIX}_SITE` — optional site UUID; if omitted, `GET /v1/sites` then devices per site
-- `{PREFIX}_VERIFY_TLS` — default true
+- `{PREFIX}_TLS_CA` or global `NI_TLS_CA_FILE` — PEM CA/chain so TLS verification stays on
+- `{PREFIX}_VERIFY_TLS` — default true; do not use `false` as the deploy path
 
 Allowlisted GET paths only: `/v1/info`, `/v1/sites`, `/v1/sites/{siteId}/devices`, `/v1/sites/{siteId}/devices/{deviceId}`. No adopt, actions, port control, or unadopt.
 

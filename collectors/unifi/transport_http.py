@@ -5,13 +5,32 @@ Never logs API keys. Only GET. Paths must match the read-only allowlist.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Protocol
+import os
+from typing import Any, Optional, Protocol, Union
 
 import httpx
 
 from collectors.common.secrets import DeviceSecrets
 from collectors.common.transport import ReadOnlyViolation, TransportError, sanitize_error
 from collectors.unifi.readonly import unifi_get_allowed
+
+TlsVerify = Union[bool, str]
+
+
+def tls_verify_setting(secrets: DeviceSecrets) -> TlsVerify:
+    """Return httpx verify= value. A CA file keeps verification on.
+
+    verify=False is not the supported UniFi deploy path; provide NI_TLS_CA_FILE
+    or {PREFIX}_TLS_CA instead.
+    """
+    ca = (secrets.tls_ca_file or "").strip()
+    if ca:
+        if not os.path.isfile(ca):
+            raise TransportError("tls ca file missing")
+        return ca
+    if secrets.verify_tls is False:
+        return False
+    return True
 
 
 class UnifiJsonClient(Protocol):
@@ -43,10 +62,7 @@ class UnifiHttpClient:
         self._base = (secrets.base_url or "").rstrip("/")
         self._api_key = secrets.api_key or ""
         self._timeout = timeout_sec
-        verify = True
-        if secrets.verify_tls is False:
-            verify = False
-        self._verify = verify
+        self._verify = tls_verify_setting(secrets)
 
     def get_json(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         if not unifi_get_allowed(path):
