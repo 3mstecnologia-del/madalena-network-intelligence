@@ -23,6 +23,7 @@ class DeviceSecrets:
     site: Optional[str] = None
     verify_tls: bool = True
     tls_ca_file: Optional[str] = None
+    tls_server_name: Optional[str] = None
 
 
 def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[DeviceSecrets]:
@@ -38,6 +39,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
       {prefix}_API_KEY
       {prefix}_SITE       (optional UniFi site UUID)
       {prefix}_TLS_CA     (optional PEM CA/chain file for TLS verification)
+      {prefix}_TLS_SERVER_NAME (DNS SAN used for TLS hostname checks when BASE_URL is an IP)
       {prefix}_VERIFY_TLS (true|false, default true; prefer {prefix}_TLS_CA)
     Global (Compose):
       NI_TLS_CA_FILE      (container path; used when per-prefix TLS_CA is unset)
@@ -63,6 +65,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
     )
     if tls_ca:
         tls_ca = tls_ca.strip() or None
+    tls_server_name = (os.getenv(f"{secret_prefix}_TLS_SERVER_NAME") or "").strip() or None
     try:
         port = int(port_raw)
     except ValueError:
@@ -83,6 +86,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
             site=site,
             verify_tls=verify_tls,
             tls_ca_file=tls_ca,
+            tls_server_name=tls_server_name,
         )
 
     if not host or not user or not password:
@@ -96,4 +100,5 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
         site=site,
         verify_tls=verify_tls,
         tls_ca_file=tls_ca,
+        tls_server_name=tls_server_name,
     )

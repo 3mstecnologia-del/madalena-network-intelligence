@@ -80,6 +80,15 @@ NI_TLS_CA_FILE=/run/tls/unifi-ca.pem
 
 Place `unifi-ca.pem` inside `NI_TRUST_DIR`. Do not set `{PREFIX}_VERIFY_TLS=false`.
 
+The Integration API URL host must match a certificate SAN. Prefer a DNS name in `{PREFIX}_BASE_URL`. If the API is only reachable by IP while the certificate has DNS SANs, keep verification on and set:
+
+```bash
+# .env (private) — DNS name that appears on the certificate (not an IP)
+{PREFIX}_TLS_SERVER_NAME=unifi.example.invalid
+```
+
+TCP still uses `{PREFIX}_BASE_URL`. TLS verifies the CA and that SAN. Do not disable hostname checks.
+
 ## 5. Docker Compose
 
 ```bash
@@ -164,6 +173,7 @@ If this upgrade includes SSH known_hosts / UniFi CA support, **before** recreate
 2. Add to private `.env`: `NI_SSH_KNOWN_HOSTS_FILE=/etc/madalena-ni/known_hosts` and `NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts`.
 3. If UniFi TLS uses a private CA: put `unifi-ca.pem` in `/etc/madalena-ni/tls/`, set `NI_TRUST_DIR=/etc/madalena-ni/tls` and `NI_TLS_CA_FILE=/run/tls/unifi-ca.pem`.
 4. Remove any `NI_SSH_MISSING_HOST_KEY=accept-new` and `{PREFIX}_VERIFY_TLS=false`.
+5. UniFi: if `BASE_URL` is an IP and the certificate has DNS SANs, set `{PREFIX}_TLS_SERVER_NAME` to that DNS SAN. Keep `NI_TLS_CA_FILE`.
 
 Then:
 

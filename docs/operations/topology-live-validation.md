@@ -14,7 +14,7 @@ Não altere MikroTik, UniFi, Zabbix ou a VPS além de executar coleta/consulta j
    - MikroTik: `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD`
    - UniFi: `{PREFIX}_BASE_URL` (raiz da Integration API), `{PREFIX}_API_KEY`, opcional `{PREFIX}_SITE`
    - SSH: arquivo `known_hosts` montado em `/run/ssh/known_hosts` (não usar `accept-new`)
-   - UniFi TLS: CA/cadeia em `NI_TLS_CA_FILE` (não usar `VERIFY_TLS=false`)
+   - UniFi TLS: CA/cadeia em `NI_TLS_CA_FILE` (não usar `VERIFY_TLS=false`). Se `BASE_URL` for IP e o certificado tiver DNS SAN, `{PREFIX}_TLS_SERVER_NAME` deve ser esse SAN.
 4. Não cole logs com senha, API key, IP privado real, MAC real, serial ou hostname de cliente.
 
 ## Passos

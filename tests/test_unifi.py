@@ -126,6 +126,117 @@ def test_unifi_tls_uses_ca_file_and_keeps_verification(tmp_path, monkeypatch):
     assert tls_verify_setting(resolved) == str(ca)
 
 
+def test_unifi_tls_server_name_pins_certificate_hostname():
+    import ssl
+
+    from collectors.common.secrets import DeviceSecrets
+    from collectors.unifi.transport_http import attach_tls_server_name, tls_client_verify
+
+    ctx = ssl.create_default_context()
+    seen: dict = {}
+
+    def spy(sock, *args, server_hostname=None, **kwargs):
+        seen["server_hostname"] = server_hostname
+        raise OSError("stop")
+
+    ctx.wrap_socket = spy  # type: ignore[method-assign]
+    attach_tls_server_name(ctx, "unifi.example.invalid")
+    try:
+        ctx.wrap_socket(object(), server_hostname="10.30.9.9")
+    except OSError:
+        pass
+    assert seen["server_hostname"] == "unifi.example.invalid"
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+
+    secrets = DeviceSecrets(
+        base_url="https://10.30.9.9/integration",
+        api_key="k",
+        tls_server_name="unifi.example.invalid",
+    )
+    verify = tls_client_verify(secrets)
+    assert verify is not False
+    assert isinstance(verify, ssl.SSLContext)
+
+
+def test_unifi_tls_server_name_requires_verification_and_dns():
+    from collectors.common.secrets import DeviceSecrets
+    from collectors.unifi.transport_http import tls_client_verify
+
+    off = DeviceSecrets(
+        base_url="https://10.30.9.9/integration",
+        api_key="k",
+        verify_tls=False,
+        tls_server_name="unifi.example.invalid",
+    )
+    with pytest.raises(TransportError) as exc:
+        tls_client_verify(off)
+    assert "verification" in str(exc.value).lower()
+
+    bad = DeviceSecrets(
+        base_url="https://10.30.9.9/integration",
+        api_key="k",
+        tls_server_name="10.30.9.9",
+    )
+    with pytest.raises(TransportError) as exc:
+        tls_client_verify(bad)
+    assert "server name" in str(exc.value).lower()
+
+
+def test_unifi_tls_server_name_from_env_and_httpx(monkeypatch):
+    import ssl
+
+    from collectors.common.secrets import DeviceSecrets, resolve_secrets
+    from collectors.unifi.transport_http import UnifiHttpClient, tls_client_verify
+
+    monkeypatch.setenv("U_API_KEY", "k")
+    monkeypatch.setenv("U_BASE_URL", "https://10.30.9.9/integration")
+    monkeypatch.setenv("U_TLS_SERVER_NAME", "unifi.example.invalid")
+    resolved = resolve_secrets("env", "U")
+    assert resolved is not None
+    assert resolved.tls_server_name == "unifi.example.invalid"
+
+    captured: dict = {}
+
+    class FakeClient:
+        def __init__(self, timeout=None, verify=True):
+            captured["verify"] = verify
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url, params=None, headers=None):
+            class Resp:
+                status_code = 200
+
+                def json(self):
+                    return {"applicationVersion": "10.4.57"}
+
+            return Resp()
+
+    monkeypatch.setattr("collectors.unifi.transport_http.httpx.Client", FakeClient)
+    UnifiHttpClient(resolved).get_json("/v1/info")
+    assert captured["verify"] is not False
+    assert isinstance(captured["verify"], ssl.SSLContext)
+
+    ca_secrets = DeviceSecrets(
+        base_url="https://10.30.9.9/integration",
+        api_key="k",
+        verify_tls=False,
+        tls_ca_file="/run/tls/unifi-ca.pem",
+        tls_server_name="unifi.example.invalid",
+    )
+    monkeypatch.setattr("collectors.unifi.transport_http.os.path.isfile", lambda p: True)
+    ctx = ssl.create_default_context()
+    monkeypatch.setattr("collectors.unifi.transport_http._ssl_context", lambda verify: ctx)
+    pinned = tls_client_verify(ca_secrets)
+    assert pinned is not False
+    assert isinstance(pinned, ssl.SSLContext)
+
+
 def test_unifi_tls_missing_ca_file_is_config_error(tmp_path):
     from collectors.common.secrets import DeviceSecrets
     from collectors.unifi.transport_http import tls_verify_setting
