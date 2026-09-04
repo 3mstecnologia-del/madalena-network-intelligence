@@ -12,7 +12,7 @@ Read-only: MikroTik collection never issues `add` / `set` / `remove` / `enable` 
 
 1. Scheduler selects enabled devices of a type.
 2. `IngestService.start_run` records tenant/site/device/version.
-3. Collector runs allowlisted read commands (light or full).
+3. Collector runs exact allowlisted read commands (light or full). Suffixes, chaining, and extra modifiers are rejected.
 4. Successful command outputs are parsed and ingested. Failed commands increment `commands_failed` and mark completeness `partial` or `none`.
 5. `finish_run` stores counts, sanitized errors, completeness. Commit. Prior observations remain.
 
@@ -22,12 +22,33 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 
 | Mode | Commands |
 |------|----------|
-| light | identity, ARP, DHCP, FDB |
-| full | light + resource, interfaces, neighbors |
+| light | identity, ARP, DHCP, FDB, neighbors |
+| full | light + resource, interfaces |
 
 Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`. Per-device `collectors_enabled` selects which command groups run (a fleet member may omit `dhcp`).
 
+SSH host-key checking is reject-unknown. Deploy mounts a trusted `known_hosts` at `/run/ssh/known_hosts` (`NI_SSH_KNOWN_HOSTS`). Do not use `NI_SSH_MISSING_HOST_KEY=accept-new` as the supported configuration.
+
+Neighbor fields are optional. Missing identity, remote interface, protocol, or version is not an error. Neighbors also produce `topology_links` (observations, not correlated truth).
+
 Tests must use `MemoryTransport` or `collect_from_texts`.
+
+## UniFi Network (Integration API)
+
+Read-only HTTP GET against the documented Integration API (`X-API-Key`). Runtime:
+
+- `{PREFIX}_BASE_URL` — Integration root (no hostname hardcoded)
+- `{PREFIX}_API_KEY`
+- `{PREFIX}_SITE` — optional site UUID; if omitted, `GET /v1/sites` then devices per site
+- `{PREFIX}_TLS_CA` or global `NI_TLS_CA_FILE` — optional PEM CA/chain when verification stays on
+- `{PREFIX}_TLS_SERVER_NAME` — optional DNS SAN pin when verification stays on and `BASE_URL` uses an IP
+- `{PREFIX}_VERIFY_TLS` — default true. `false` is a UniFi-only lab exception (`UnifiHttpClient`; sanitized warning; does not affect SSH)
+
+Allowlisted GET paths only: `/v1/info`, `/v1/sites`, `/v1/sites/{siteId}/devices`, `/v1/sites/{siteId}/devices/{deviceId}`. No adopt, actions, port control, or unadopt.
+
+Inventory fields follow the documented schema (`id`, `mac`/`macAddress`, `name`, `model`, `state`, `type`, optional `ipAddress`, `firmwareVersion`). Uplink in the documented schema is `{ "deviceId": "<uuid>" }` and is stored when present. Ports (`interfaces.ports[].idx`) become local interfaces `port-{idx}` when the detail payload includes them.
+
+Live HTTP is not exercised in CI. Tests use `MemoryUnifiClient` and synthetic JSON fixtures.
 
 ## Intelbras G08
 

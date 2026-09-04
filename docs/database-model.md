@@ -15,7 +15,9 @@ Observations are temporal. Upsert keys:
 | `dhcp_leases` | tenant, device, mac, ip |
 | `arp_observations` | tenant, device, mac, ip, **interface** |
 | `mac_observations` | tenant, device, mac, interface |
-| `neighbor_observations` | tenant, device, mac, ip, interface, identity |
+| `neighbor_observations` | tenant, device, mac, ip, interface, identity, **protocol** |
+| `inventory_node_observations` | tenant, controller device, source_id (else mac) |
+| `topology_observations` | tenant, local device, local interface, remote_mac **or** remote_source_id **or** remote_identity, source, protocol |
 | `interfaces` | device, name (last_seen updated; never deleted) |
 
 A MAC that changes interface, IP, or observing device keeps the previous row (`first_seen` / `last_seen`). Current state is derived at query time.
@@ -26,7 +28,9 @@ Absence of a row in a later collection run is **not** proof of absence.
 
 `collection_runs`: tenant, site, device, collector_type, collector_version, status, completeness, command counts, record counts (`seen` / `created` / `updated` / `excluded`), `parse_failures`, sanitized error_summary, started_at, finished_at.
 
-`devices.collectors_enabled` (JSON list) and `devices.collection_interval_sec` are runtime. `exclusion_policies` holds VLAN/CIDR/source/collector/interface rules per tenant (optional site/device).
+`devices.collectors_enabled` (JSON list) and `devices.collection_interval_sec` are runtime. `exclusion_policies` holds VLAN/CIDR/source/collector/interface rules per tenant (optional site/device). `devices.chassis_mac` / `devices.source_ref` are last-known identity hints for correlation (not Zabbix IDs).
+
+Topology observations are **not** maps. A later Zabbix Map adapter should read this query layer; do not store Zabbix IDs on topology rows.
 
 ## Indexes (query paths)
 

@@ -69,6 +69,8 @@ class Device(Base):
     last_identity: Mapped[Optional[str]] = mapped_column(String(255))
     last_version: Mapped[Optional[str]] = mapped_column(String(128))
     last_observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    chassis_mac: Mapped[Optional[str]] = mapped_column(String(17), index=True)
+    source_ref: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     site: Mapped[Site] = relationship(back_populates="devices")
@@ -329,10 +331,72 @@ class NeighborObservation(Base):
     mac: Mapped[Optional[str]] = mapped_column(String(17), index=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     interface: Mapped[Optional[str]] = mapped_column(String(128))
+    remote_interface: Mapped[Optional[str]] = mapped_column(String(128))
     identity: Mapped[Optional[str]] = mapped_column(String(255))
     platform: Mapped[Optional[str]] = mapped_column(String(128))
+    protocol: Mapped[Optional[str]] = mapped_column(String(32))
+    version: Mapped[Optional[str]] = mapped_column(String(128))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     source: Mapped[str] = mapped_column(String(64), default="mikrotik_neighbor")
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
+
+
+class InventoryNodeObservation(Base):
+    """Adopted/inventory node seen by a controller collector (e.g. UniFi Network)."""
+
+    __tablename__ = "inventory_node_observations"
+    __table_args__ = (
+        Index("ix_inv_node_tenant_mac", "tenant_id", "mac"),
+        Index("ix_inv_node_tenant_source", "tenant_id", "source_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    controller_device_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("devices.id"), nullable=False, index=True
+    )
+    observed_device_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("devices.id"), index=True)
+    source_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(255))
+    mac: Mapped[Optional[str]] = mapped_column(String(17), index=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64))
+    model: Mapped[Optional[str]] = mapped_column(String(128))
+    category: Mapped[Optional[str]] = mapped_column(String(64))
+    state: Mapped[Optional[str]] = mapped_column(String(64))
+    firmware: Mapped[Optional[str]] = mapped_column(String(128))
+    uplink_source_id: Mapped[Optional[str]] = mapped_column(String(64))
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    source: Mapped[str] = mapped_column(String(64), default="unifi_inventory")
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
+
+
+class TopologyObservation(Base):
+    """One-sided topology observation. Correlation classifies confirmed vs unilateral."""
+
+    __tablename__ = "topology_observations"
+    __table_args__ = (
+        Index("ix_topo_tenant_local", "tenant_id", "local_device_id"),
+        Index("ix_topo_tenant_remote_mac", "tenant_id", "remote_mac"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    site_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("sites.id"), index=True)
+    local_device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"), nullable=False, index=True)
+    local_interface: Mapped[Optional[str]] = mapped_column(String(128))
+    remote_device_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("devices.id"), index=True)
+    remote_interface: Mapped[Optional[str]] = mapped_column(String(128))
+    remote_identity: Mapped[Optional[str]] = mapped_column(String(255))
+    remote_mac: Mapped[Optional[str]] = mapped_column(String(17), index=True)
+    remote_ip: Mapped[Optional[str]] = mapped_column(String(64))
+    remote_source_id: Mapped[Optional[str]] = mapped_column(String(64))
+    protocol: Mapped[Optional[str]] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(64), default="mikrotik_neighbor")
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))

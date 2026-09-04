@@ -27,6 +27,7 @@ flowchart TB
   subgraph sources [Collectors]
     MK[MikroTik RouterOS]
     G08[Intelbras G08]
+    UNI[UniFi Network]
   end
   SCH[Scheduler]
   NORM[Normalization]
@@ -38,8 +39,10 @@ flowchart TB
 
   SCH --> MK
   SCH --> G08
+  SCH --> UNI
   MK --> NORM
   G08 --> NORM
+  UNI --> NORM
   NORM --> PG
   PG --> CORR
   CORR --> API
@@ -100,6 +103,9 @@ HTTP base: `http://127.0.0.1:8081`
 - `POST /tools/list_tenant_network_assets`
 - `POST /tools/get_mac_history` — timeline with provenance
 - `POST /tools/get_collection_status` — completeness + freshness
+- `POST /tools/get_device_neighbors`
+- `POST /tools/get_device_links`
+- `POST /tools/get_topology`
 
 `GET /tools` lists them. Tenant is always required.
 
@@ -112,6 +118,7 @@ Runtime secrets: inject `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD
 ## Collectors
 
 - **MikroTik**: identity, interfaces, ARP, DHCP leases, bridge/FDB, neighbors. Parsers are transport-agnostic. Live path is generic SSH behind a read-only allowlist (`ReadOnlyTransport`). Tests use `MemoryTransport`.
+- **UniFi Network**: Integration API GET (sites, devices, optional detail/uplink/ports). Live HTTP uses runtime `BASE_URL` + `API_KEY`. Tests use `MemoryUnifiClient`.
 - **Intelbras G08**: ONT MAC table via `show ont mac-address-table interface gpon all` (read-only allowlist). Do not invent other G08 commands.
 
 How to add a collector: [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md). Specs: [`docs/collectors.md`](docs/collectors.md).

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.ip import normalize_ip
 from app.core.mac import normalize_mac
 from app.correlation.engine import CorrelationEngine, MacCorrelation
+from app.correlation.topology import TopologyCorrelator
 from app.models.entities import CollectionRun, Device, IpAddress, MacAddress, Tenant
 
 
@@ -22,6 +23,7 @@ class QueryService:
     def __init__(self, db: Session):
         self.db = db
         self.corr = CorrelationEngine(db)
+        self.topology = TopologyCorrelator(db)
 
     def require_tenant(self, slug: str) -> Tenant:
         tenant = self.db.scalar(select(Tenant).where(Tenant.slug == slug))
@@ -199,3 +201,42 @@ class QueryService:
             "access_path": corr.access_path.__dict__ if corr.access_path else None,
             "sources": corr.sources,
         }
+
+    def device_neighbors(
+        self, tenant_slug: str, device_id: UUID, limit: int = 50, offset: int = 0
+    ) -> dict:
+        return self.topology.device_neighbors(
+            tenant_slug, device_id, limit=limit, offset=offset
+        )
+
+    def device_links(
+        self,
+        tenant_slug: str,
+        device_id: UUID,
+        *,
+        include_history: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        return self.topology.topology(
+            tenant_slug,
+            device_id=device_id,
+            include_history=include_history,
+            limit=limit,
+            offset=offset,
+        )
+
+    def get_topology(
+        self,
+        tenant_slug: str,
+        *,
+        include_history: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        return self.topology.topology(
+            tenant_slug,
+            include_history=include_history,
+            limit=limit,
+            offset=offset,
+        )

@@ -1,0 +1,13 @@
+{
+  "id": "33333333-3333-4333-8333-333333333333",
+  "macAddress": "AA:BB:CC:20:00:02",
+  "ipAddress": "10.30.2.20",
+  "name": "LAB-UNIFI-AP",
+  "model": "U6-LR",
+  "state": "ONLINE",
+  "type": "uap",
+  "firmwareVersion": "6.6.55",
+  "uplink": {
+    "deviceId": "22222222-2222-4222-8222-222222222222"
+  }
+}

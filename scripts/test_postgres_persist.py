@@ -11,9 +11,9 @@ import sys
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models.entities import Device, DhcpLease, Site, Tenant
+from app.models.entities import Device, DhcpLease, Site, Tenant, TopologyObservation
 from app.services.ingest import IngestService
-from collectors.common.types import CollectorResult, NormalizedDhcpLease
+from collectors.common.types import CollectorResult, NormalizedDhcpLease, NormalizedTopologyLink
 
 SLUG = "persist-lab"
 MAC = "AA:BB:CC:DD:EE:01"
@@ -46,7 +46,16 @@ def write() -> int:
         IngestService(db).ingest_result(
             tenant_id=tenant.id,
             device_id=device.id,
-            result=CollectorResult(dhcp=[NormalizedDhcpLease(mac=MAC, ip_address=IP)]),
+            result=CollectorResult(
+                dhcp=[NormalizedDhcpLease(mac=MAC, ip_address=IP)],
+                topology_links=[
+                    NormalizedTopologyLink(
+                        local_interface="sfp1",
+                        remote_mac="AA:BB:CC:10:00:02",
+                        protocol="lldp",
+                    )
+                ],
+            ),
         )
         db.commit()
         print(f"wrote tenant={SLUG} mac={MAC} ip={IP}")
@@ -67,6 +76,15 @@ def read() -> int:
         )
         if lease is None or lease.ip_address != IP:
             print("FAIL: observation missing after restart")
+            return 1
+        link = db.scalar(
+            select(TopologyObservation).where(
+                TopologyObservation.tenant_id == tenant.id,
+                TopologyObservation.remote_mac == "AA:BB:CC:10:00:02",
+            )
+        )
+        if link is None:
+            print("FAIL: topology observation missing after restart")
             return 1
         print("PASS: postgresql volume preserved synthetic observation")
         return 0

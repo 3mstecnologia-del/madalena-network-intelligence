@@ -54,6 +54,9 @@ test-persist:
 	docker compose run --rm --no-deps api python -m scripts.test_postgres_persist read
 
 # LAB_SECRETS_FILE must point to a local dotenv outside this repo. Never commit it.
+KNOWN_HOSTS_FILE ?= $(CURDIR)/deploy/ssh/known_hosts
+TRUST_DIR ?= $(CURDIR)/deploy/tls
+
 lab-collect:
 	@test -n "$(LAB_SECRETS_FILE)" || (echo "LAB_SECRETS_FILE is required"; exit 1)
 	docker compose up -d db api mcp
@@ -61,8 +64,10 @@ lab-collect:
 	docker compose run --rm --no-deps \
 		-v "$(CURDIR):/app" \
 		-v "$(LAB_SECRETS_FILE):/run/secrets/lab.env:ro" \
+		-v "$(KNOWN_HOSTS_FILE):/run/ssh/known_hosts:ro" \
+		-v "$(TRUST_DIR):/run/tls:ro" \
 		-e LAB_SECRETS_FILE=/run/secrets/lab.env \
-		-e NI_SSH_MISSING_HOST_KEY=accept-new \
+		-e NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts \
 		-e SECRET_PROVIDER=env \
 		api python -m scripts.lab_collect
 
@@ -71,8 +76,10 @@ lab-diag:
 	docker compose run --rm --no-deps \
 		-v "$(CURDIR):/app" \
 		-v "$(LAB_SECRETS_FILE):/run/secrets/lab.env:ro" \
+		-v "$(KNOWN_HOSTS_FILE):/run/ssh/known_hosts:ro" \
+		-v "$(TRUST_DIR):/run/tls:ro" \
 		-e LAB_SECRETS_FILE=/run/secrets/lab.env \
-		-e NI_SSH_MISSING_HOST_KEY=accept-new \
+		-e NI_SSH_KNOWN_HOSTS=/run/ssh/known_hosts \
 		-e SECRET_PROVIDER=env \
 		api python -m scripts.lab_diag
 

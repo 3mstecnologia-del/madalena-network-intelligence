@@ -8,7 +8,7 @@ Canonical product architecture (purpose, layers, temporal model, provenance): [a
 Collectors → Scheduler → Normalization → PostgreSQL → Correlation Engine → REST API + MCP → Hermes/Madalena
 ```
 
-1. Scheduler triggers collectors per interval (MikroTik light / OLT / full inventory).
+1. Scheduler triggers collectors per interval (MikroTik light / OLT / UniFi / full inventory).
 2. Collectors receive **runtime credentials** via `secret_provider` + `secret_prefix` (environment mapping). No passwords in Git or PostgreSQL.
 3. A `Transport.execute(command)` returns raw CLI text. Parsers are transport-agnostic.
 4. Ingest upserts temporal observations. Matching keys update `last_seen`; a new key (MAC moved interface/IP/device) inserts a **new row**. Rows are never deleted because a later run omitted them.

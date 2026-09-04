@@ -17,6 +17,7 @@ flowchart TB
   subgraph sources [Independent sources]
     MK["MikroTik fleet — DHCP, ARP, FDB, interfaces, neighbors"]
     OLT["OLT — MAC, ONU/ONT, PON, VLAN"]
+    UNI["UniFi Network — inventory, optional uplink"]
   end
 
   OBS[Normalized observations]
@@ -28,6 +29,7 @@ flowchart TB
 
   MK --> OBS
   OLT --> OBS
+  UNI --> OBS
   OBS --> PG
   PG --> CORR
   CORR --> API

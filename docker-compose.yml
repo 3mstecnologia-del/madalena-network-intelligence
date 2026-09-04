@@ -48,6 +48,10 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
+      NI_SSH_KNOWN_HOSTS: ${NI_SSH_KNOWN_HOSTS:-/run/ssh/known_hosts}
+    volumes:
+      - ${NI_SSH_KNOWN_HOSTS_FILE:-./deploy/ssh/known_hosts}:/run/ssh/known_hosts:ro
+      - ${NI_TRUST_DIR:-./deploy/tls}:/run/tls:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -75,7 +79,12 @@ services:
       SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
       SCHEDULER_MIKROTIK_INTERVAL_SEC: ${SCHEDULER_MIKROTIK_INTERVAL_SEC:-900}
       SCHEDULER_OLT_INTERVAL_SEC: ${SCHEDULER_OLT_INTERVAL_SEC:-1800}
+      SCHEDULER_UNIFI_INTERVAL_SEC: ${SCHEDULER_UNIFI_INTERVAL_SEC:-1800}
       SCHEDULER_FULL_INVENTORY_INTERVAL_SEC: ${SCHEDULER_FULL_INVENTORY_INTERVAL_SEC:-21600}
+      NI_SSH_KNOWN_HOSTS: ${NI_SSH_KNOWN_HOSTS:-/run/ssh/known_hosts}
+    volumes:
+      - ${NI_SSH_KNOWN_HOSTS_FILE:-./deploy/ssh/known_hosts}:/run/ssh/known_hosts:ro
+      - ${NI_TRUST_DIR:-./deploy/tls}:/run/tls:ro
     depends_on:
       db:
         condition: service_healthy

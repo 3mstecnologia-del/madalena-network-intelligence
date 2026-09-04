@@ -54,6 +54,67 @@ def test_readonly_refuses_unknown_read():
     guarded = ReadOnlyTransport(inner, MIKROTIK_READ_ALLOWLIST)
     with pytest.raises(ReadOnlyViolation):
         guarded.execute("/system reboot")
+    assert inner.calls == []
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "/system identity print ; /system reboot",
+        "/system identity print\n/system reboot",
+        "/ip arp print detail && /system reboot",
+        "/ip arp print detail || /system reboot",
+        "/ip arp print detail | /system reboot",
+        "/ip arp print detail # comment",
+        "/ip arp print detail { /system reboot }",
+        "/ip arp print detail;/system reboot",
+        "/ip arp print detail without-paging extra",
+        "/ip arp print detail where address=10.0.0.1",
+    ],
+)
+def test_readonly_rejects_command_chaining_and_suffixes(cmd):
+    inner = MemoryTransport(
+        {
+            "/system identity print": "ok",
+            "/ip arp print detail": "ok",
+            cmd: "should-not-run",
+        }
+    )
+    guarded = ReadOnlyTransport(inner, MIKROTIK_READ_ALLOWLIST)
+    with pytest.raises(ReadOnlyViolation):
+        guarded.execute(cmd)
+    assert inner.calls == []
+
+
+def test_readonly_allows_explicit_without_paging():
+    inner = MemoryTransport(
+        {"/ip dhcp-server lease print detail without-paging": "ok"}
+    )
+    guarded = ReadOnlyTransport(inner, MIKROTIK_READ_ALLOWLIST)
+    result = guarded.execute("/ip dhcp-server lease print detail without-paging")
+    assert result.ok
+    assert inner.calls == ["/ip dhcp-server lease print detail without-paging"]
+
+
+def test_g08_readonly_rejects_suffix_on_mac_table():
+    inner = MemoryTransport({})
+    guarded = ReadOnlyTransport(inner, G08_READ_ALLOWLIST)
+    with pytest.raises(ReadOnlyViolation):
+        guarded.execute("show ont mac-address-table interface gpon all ; reboot")
+    assert inner.calls == []
+
+
+def test_sanitize_error_redacts_quoted_and_json_secrets():
+    quoted = sanitize_error('auth failed community="alpha beta gamma" extra')
+    assert "alpha" not in quoted
+    assert "<REDACTED>" in quoted
+    colon = sanitize_error("login failed token: alpha beta gamma")
+    assert "alpha" not in colon
+    assert "gamma" not in colon
+    nested = sanitize_error('{"token": "alpha beta", "host": "10.30.9.9"}')
+    assert "alpha" not in nested
+    assert "<REDACTED>" in nested
+    assert "<IP>" in nested
 
 
 def test_sanitize_error_redacts_password():
@@ -75,6 +136,7 @@ def test_collect_via_transport_partial():
         "/system identity print": (FIX / "mikrotik_identity.txt").read_text(),
         "/ip arp print detail": (FIX / "mikrotik_arp.txt").read_text(),
         "/ip dhcp-server lease print detail": (FIX / "mikrotik_dhcp.txt").read_text(),
+        "/ip neighbor print detail": (FIX / "mikrotik_neighbors.txt").read_text(),
     }
     errors = {
         "/interface bridge host print detail": "timeout",
@@ -84,7 +146,7 @@ def test_collect_via_transport_partial():
     result = collector.collect_via_transport(transport, lightweight=True)
     assert result.meta["completeness"] == "partial"
     assert result.meta["status"] == "partial"
-    assert result.meta["commands_ok"] == 3
+    assert result.meta["commands_ok"] == 4
     assert result.meta["commands_failed"] == 1
     assert result.dhcp
     assert result.arp

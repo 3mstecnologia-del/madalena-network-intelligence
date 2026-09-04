@@ -4,7 +4,8 @@ Collectors must never issue add/set/remove/enable/disable/move.
 Parser failures must not trigger a fallback mutable command.
 """
 
-# Exact prefixes accepted by ReadOnlyTransport (RouterOS 7 print/get style).
+# Exact commands accepted by ReadOnlyTransport (RouterOS 7 print/get style).
+# Modifiers such as without-paging must be listed; suffixes are not implied.
 MIKROTIK_READ_ALLOWLIST: tuple[str, ...] = (
     "/system identity print",
     "/system resource print",
@@ -14,6 +15,7 @@ MIKROTIK_READ_ALLOWLIST: tuple[str, ...] = (
     "/ip arp print detail",
     "/ip dhcp-server lease print",
     "/ip dhcp-server lease print detail",
+    "/ip dhcp-server lease print detail without-paging",
     "/interface bridge host print",
     "/interface bridge host print detail",
     "/ip neighbor print",
@@ -29,12 +31,12 @@ MIKROTIK_LIGHT_COMMANDS: tuple[tuple[str, str], ...] = (
     ("arp", "/ip arp print detail"),
     ("dhcp", "/ip dhcp-server lease print detail"),
     ("fdb", "/interface bridge host print detail"),
+    ("neighbors", "/ip neighbor print detail"),
 )
 
 MIKROTIK_FULL_COMMANDS: tuple[tuple[str, str], ...] = MIKROTIK_LIGHT_COMMANDS + (
     ("resource", "/system resource print"),
     ("interfaces", "/interface print detail"),
-    ("neighbors", "/ip neighbor print detail"),
 )
 
 # Map command step key → collector name used in device.collectors_enabled
@@ -48,4 +50,4 @@ MIKROTIK_STEP_COLLECTOR: dict[str, str] = {
     "neighbors": "neighbors",
 }
 
-COLLECTOR_VERSION = "0.3.0"
+COLLECTOR_VERSION = "0.4.0"

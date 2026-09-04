@@ -17,5 +17,8 @@ All tools require `tenant`. Responses include a short `text` (for an agent) plus
 | `list_tenant_network_assets` | Device count + recent MACs |
 | `get_mac_history` | Timeline + provenance (`source`, device, interface, IP, collection_run_id) |
 | `get_collection_status` | Recent runs, completeness, freshness_seconds |
+| `get_device_neighbors` | Neighbor observations for one device (optional fields preserved) |
+| `get_device_links` | Correlated links for one device (`confirmed` / `unilateral` / `unresolved` / `conflicting`) |
+| `get_topology` | Tenant topology current view; `include_history` keeps previous uplinks |
 
 `GET /tools` lists them. HTTP base in Compose: `http://127.0.0.1:8081`.
