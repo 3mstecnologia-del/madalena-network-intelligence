@@ -306,11 +306,27 @@ def parse_neighbors(text: str) -> list[NormalizedNeighbor]:
                     mac=mac,
                     ip_address=ip,
                     interface=_clean_opt(stanza.get("interface")),
+                    remote_interface=_clean_opt(stanza.get("interface-name")),
                     identity=ident,
                     platform=_clean_opt(stanza.get("platform") or stanza.get("board")),
+                    version=_clean_opt(stanza.get("version")),
+                    protocol=_normalize_protocol(stanza.get("discoverer") or stanza.get("protocol")),
                 )
             )
     return results
+
+
+def _normalize_protocol(value: Optional[str]) -> Optional[str]:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return None
+    if "lldp" in raw:
+        return "lldp"
+    if "cdp" in raw:
+        return "cdp"
+    if "mndp" in raw:
+        return "mndp"
+    return raw.split()[0]
 
 
 def _safe_mac(value: Optional[str]) -> Optional[str]:

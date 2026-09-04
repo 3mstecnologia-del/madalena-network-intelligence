@@ -16,7 +16,7 @@ from collectors.common.transport import (
     TransportError,
     sanitize_error,
 )
-from collectors.common.types import CollectorResult
+from collectors.common.types import CollectorResult, NormalizedTopologyLink
 from collectors.mikrotik.parsers import (
     parse_arp,
     parse_bridge_fdb,
@@ -58,13 +58,27 @@ class MikroTikCollector:
         interfaces_text: str = "",
         neighbors_text: str = "",
     ) -> CollectorResult:
+        neighbors = parse_neighbors(neighbors_text) if neighbors_text else []
         return CollectorResult(
             dhcp=parse_dhcp_leases(dhcp_text) if dhcp_text else [],
             arp=parse_arp(arp_text) if arp_text else [],
             fdb=parse_bridge_fdb(fdb_text) if fdb_text else [],
             identity=parse_identity(identity_text) if identity_text else None,
             interfaces=parse_interfaces(interfaces_text) if interfaces_text else [],
-            neighbors=parse_neighbors(neighbors_text) if neighbors_text else [],
+            neighbors=neighbors,
+            topology_links=[
+                NormalizedTopologyLink(
+                    local_interface=n.interface,
+                    remote_mac=n.mac,
+                    remote_ip=n.ip_address,
+                    remote_identity=n.identity,
+                    remote_interface=n.remote_interface,
+                    protocol=n.protocol,
+                    observed_at=n.observed_at,
+                    source=n.source,
+                )
+                for n in neighbors
+            ],
             meta={
                 "mode": "text",
                 "routeros_target": "7",

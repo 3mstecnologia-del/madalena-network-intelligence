@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol
 
 _SECRETISH = re.compile(
-    r"(?i)(password|passwd|secret|token|community|private-key|username|user|login)\s*[=:]\s*\S+"
+    r"(?i)(password|passwd|secret|token|community|private-key|username|user|login|api[-_]?key|authorization|x-api-key)\s*[=:]\s*\S+"
 )
 _IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
 _MAC = re.compile(r"(?i)(?:[0-9A-F]{2}[:\-]){5}[0-9A-F]{2}")
