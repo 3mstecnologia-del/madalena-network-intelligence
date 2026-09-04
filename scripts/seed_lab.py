@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.models.entities import DataSource, Device, DeviceCredentialReference, Site, Tenant
+from app.models.entities import DataSource, Device, DeviceCredentialReference, ExclusionPolicy, Site, Tenant
 
 
 def main() -> None:
@@ -55,8 +55,27 @@ def main() -> None:
             return d
 
         ensure_device("LAB-MK", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK")
-        ensure_device("LAB-MK200", "mikrotik", "MikroTik", "RouterOS", "DEVICE_LAB_MK200")
-        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_LAB_OLT")
+        ensure_device("LAB-MK-B", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK_B")
+        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_EXAMPLE_OLT")
+
+        vlan_raw = (settings.seed_exclude_vlan or "").strip()
+        if vlan_raw:
+            existing = db.scalar(
+                select(ExclusionPolicy).where(
+                    ExclusionPolicy.tenant_id == tenant.id,
+                    ExclusionPolicy.rule_type == "vlan",
+                    ExclusionPolicy.rule_value == vlan_raw,
+                )
+            )
+            if existing is None:
+                db.add(
+                    ExclusionPolicy(
+                        tenant_id=tenant.id,
+                        rule_type="vlan",
+                        rule_value=vlan_raw,
+                        enabled=True,
+                    )
+                )
 
         for code, name, ctype in [
             ("mikrotik_dhcp", "MikroTik DHCP", "mikrotik"),
