@@ -1,0 +1,39 @@
+---
+description: Tenant isolation, data minimization, and no client knowledge in public code
+alwaysApply: true
+---
+
+# Tenant, privacy, public code
+
+Tenant is a **security boundary**. Every query and mutation is tenant-scoped: devices, MACs, IPs, collection runs, history, correlation, API, MCP.
+
+A tenant must never receive another tenant's observations. New/changed endpoints need a **cross-tenant** test when they return data.
+
+## Data minimization
+
+Prefer dropping out-of-scope evidence **before** persisting endpoint observations.
+
+Exclusion policy is **runtime / private configuration**, never hardcoded in this public repo:
+
+- no customer names
+- no real VLAN IDs or “student VLAN” mappings
+- no real networks, IPs, or “this OLT is Y”
+
+Future filters (exclude VLAN / network / device / observation class) must be testable and auditable **without** storing the excluded payload.
+
+## No client knowledge in code
+
+Public/generic code must not encode operational facts that belong in tenant config:
+
+- which router is the DHCP server
+- which VLAN is which role
+- which OLT belongs to which site
+- management networks, real hostnames, customer names
+
+## Fixtures
+
+Versioned fixtures are **synthetic**. Do not paste real customer CLI and change one field. Preserve device syntax; use artificial identifiers.
+
+## Logs
+
+Structured when practical. Sanitize. No secrets, no unnecessary private command output. Tenant/device IDs only when policy allows. Collection runs are core product observability.

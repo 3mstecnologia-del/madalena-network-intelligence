@@ -1,5 +1,7 @@
 # Collectors
 
+Workflow to add a family: [development/adding-a-collector.md](development/adding-a-collector.md). This file is the spec of collectors that already exist.
+
 ## Design
 
 Transport ≠ parser. Parsers consume text fixtures or transport stdout. Live SSH is optional and uses runtime secrets only.

@@ -50,7 +50,7 @@ flowchart TB
 
 Multi-tenant model: **Tenant → Site → Device → observations**. Every operational query requires `tenant`.
 
-Details: [`docs/architecture.md`](docs/architecture.md), [`docs/collectors.md`](docs/collectors.md), [`docs/database-model.md`](docs/database-model.md), [`docs/runtime-configuration.md`](docs/runtime-configuration.md), [`docs/mcp.md`](docs/mcp.md).
+Product architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md). Implementation snapshot: [`docs/architecture.md`](docs/architecture.md). Also: [`docs/collectors.md`](docs/collectors.md), [`docs/database-model.md`](docs/database-model.md), [`docs/runtime-configuration.md`](docs/runtime-configuration.md), [`docs/mcp.md`](docs/mcp.md).
 
 ## Requirements (host)
 
@@ -116,7 +116,7 @@ Runtime secrets: inject `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD
 - **MikroTik**: identity, interfaces, ARP, DHCP leases, bridge/FDB, neighbors. Parsers are transport-agnostic. Live path is generic SSH behind a read-only allowlist (`ReadOnlyTransport`). Tests use `MemoryTransport`.
 - **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops`. Live transport not implemented; do not invent access.
 
-How to add a collector: [`docs/collectors.md`](docs/collectors.md).
+How to add a collector: [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md). Specs: [`docs/collectors.md`](docs/collectors.md).
 
 ## Monitoring integrations
 
@@ -131,6 +131,17 @@ SNMP communities, host IPs, and credentials stay in Zabbix/Infisical — never i
 ## Hermes integration (future)
 
 Skills such as `mikrotik-routeros-ops` / `olt-intelbras-g08-ops` may call this MCP to locate MAC/IP/ONU context before operational changes. Do not embed this codebase inside the skills repo.
+
+## Development standards
+
+How this product is developed, tested, and evolved (not a copy of the global 3MS User Rule):
+
+- Cursor Project Rules: [`.cursor/rules/`](.cursor/rules/)
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- Testing: [`docs/testing/strategy.md`](docs/testing/strategy.md)
+- Local Docker ops: [`docs/operations/local-development.md`](docs/operations/local-development.md)
+- Agent map: [`AGENTS.md`](AGENTS.md)
 
 ## Security
 

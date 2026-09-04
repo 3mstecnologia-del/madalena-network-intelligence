@@ -1,5 +1,7 @@
 # Database model
 
+Concepts (observation vs current view vs correlated conclusion): [data-model/concepts.md](data-model/concepts.md).
+
 Core hierarchy: `tenants` → `sites` → `devices` → interfaces / observations.
 
 Identity indexes: `mac_addresses`, `ip_addresses` (per-tenant unique). Canonical MAC: `AA:BB:CC:DD:EE:FF`. IPs stored via `ipaddress` canonical form (IPv4 first-class; IPv6 accepted). Timestamps are timezone-aware; collectors emit UTC.

@@ -1,0 +1,54 @@
+---
+description: Temporal observations, provenance, ambiguity, and correlation rules
+globs: app/models/**,app/correlation/**,app/services/**,db/**
+alwaysApply: false
+---
+
+# Observations, history, correlation
+
+Data is **temporal observation**, not a spreadsheet that overwrites “current inventory”.
+
+Preserve `first_seen`, `last_seen`, source, device, collector, run, provenance (and location when applicable).
+
+Absence in a later collection:
+
+- does **not** mean removal
+- does **not** mean offline
+- does **not** mean the object never existed
+
+Disappearance requires an **explicit, tested** temporal policy. Do not delete history because a run omitted a row.
+
+## Provenance
+
+Every conclusion must trace to evidence.
+
+- MAC → IP: which collector, which MikroTik, which run, which timestamp
+- MAC → ONU/PON: which OLT, which run, which timestamp
+
+Correlation without provenance is incomplete.
+
+## Ambiguity
+
+Never silently pick a winner when:
+
+- a MAC has multiple plausible IPs
+- a MAC appears on multiple routers
+- a MAC has multiple locations
+- observations conflict in time
+- identification is incomplete
+
+Represent `conflict` / `ambiguity` / multiple observations. Ranking or freshness, if added, is an explicit tested policy.
+
+## Correlation
+
+Join evidence (e.g. OLT MAC ∩ DHCP MAC → IP + ONU + PON + VLAN). Future signals: ARP, FDB, neighbors, routes, interface relationships.
+
+Manual maps may assist; they must not hide contrary evidence.
+
+## Database
+
+PostgreSQL is the source of persisted observations. New schema → **new** Alembic migration; never rewrite an applied migration.
+
+Index from real query paths (`tenant + MAC`, `tenant + IP`, device/source, timestamps). No premature optimization without measurement.
+
+Concepts: `docs/data-model/concepts.md`. Tables: `docs/database-model.md`.
