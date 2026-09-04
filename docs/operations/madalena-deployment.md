@@ -125,6 +125,14 @@ Never rewrite applied Alembic revisions.
 ./scripts/validate-deployment.sh
 ```
 
+If API/MCP are published on alternate loopback ports (Compose override), either let the script read `docker compose port` or set:
+
+```bash
+VALIDATE_API_URL=http://127.0.0.1:<api-port> \
+VALIDATE_MCP_URL=http://127.0.0.1:<mcp-port> \
+./scripts/validate-deployment.sh
+```
+
 Checks:
 
 - API `GET /health` (process up)
