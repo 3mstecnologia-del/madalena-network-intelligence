@@ -1,0 +1,30 @@
+# Git and editor metadata
+.git
+.github
+.cursor
+
+# Runtime secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+acessos.env
+secrets
+credentials
+
+# Local runtime and evidence artifacts
+private-evidence
+pgdata
+*.log
+
+# Python caches and virtual environments
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+venv

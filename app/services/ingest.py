@@ -491,6 +491,9 @@ class IngestService:
                 OltMacObservation.device_id == device_id,
                 OltMacObservation.mac == om.mac,
                 OltMacObservation.ont_id == om.ont_id,
+                OltMacObservation.pon == om.pon,
+                OltMacObservation.vlan_id == om.vlan_id,
+                OltMacObservation.gem == om.gem,
             )
         )
         if row is None:

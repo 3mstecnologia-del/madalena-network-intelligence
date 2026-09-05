@@ -43,6 +43,32 @@ def test_parse_ont_mac_vid_table():
     assert {u.ont_id: u.serial for u in onus}["0/1/14"] == "ALCL12345678"
 
 
+def test_parse_ont_mac_table_preserves_distinct_services_on_same_ont():
+    text = """\
+MAC-Address         VID  ONT-ID  SN            ID/GEM
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
+AA-BB-CC-DD-EE-FF  40   0/1/14  ALCL12345678  2/129
+Total entries: 2
+"""
+
+    rows = parse_ont_mac_address_table(text)
+
+    assert [(row.vlan_id, row.gem) for row in rows] == [(30, "1/128"), (40, "2/129")]
+
+
+def test_parse_ont_mac_table_deduplicates_serial_variant_of_same_service():
+    text = """\
+MAC-Address         VID  ONT-ID  SN            ID/GEM
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL87654321  1/128
+Total entries: 2
+"""
+
+    rows = parse_ont_mac_address_table(text)
+
+    assert len(rows) == 1
+
+
 def test_parse_ont_brief():
     text = (FIX / "g08_ont_brief.txt").read_text()
     rows = parse_ont_brief(text)

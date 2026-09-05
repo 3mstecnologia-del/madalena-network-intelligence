@@ -388,6 +388,49 @@ def test_ingest_same_mac_two_onus_one_run(db: Session):
     assert {r.ont_id for r in rows} == {"0/1/14", "0/1/15"}
 
 
+def test_ingest_preserves_distinct_services_on_same_mac_and_ont(db: Session):
+    t1, _, _, _, d1o, _ = seed_two_tenants(db)
+    IngestService(db).ingest_result(
+        tenant_id=t1.id,
+        device_id=d1o.id,
+        result=CollectorResult(
+            olt_macs=[
+                NormalizedOltMac(
+                    mac=MAC,
+                    ont_id="0/1/14",
+                    pon="0/1",
+                    vlan_id=30,
+                    gem="1/128",
+                    source="olt",
+                    observed_at=_ts(1),
+                ),
+                NormalizedOltMac(
+                    mac=MAC,
+                    ont_id="0/1/14",
+                    pon="0/1",
+                    vlan_id=40,
+                    gem="1/129",
+                    source="olt",
+                    observed_at=_ts(1),
+                ),
+            ]
+        ),
+    )
+    db.commit()
+
+    rows = list(
+        db.scalars(
+            select(OltMacObservation).where(
+                OltMacObservation.mac == MAC,
+                OltMacObservation.tenant_id == t1.id,
+                OltMacObservation.ont_id == "0/1/14",
+            )
+        )
+    )
+
+    assert {(row.vlan_id, row.gem) for row in rows} == {(30, "1/128"), (40, "1/129")}
+
+
 def test_multiple_macs_behind_same_onu(db: Session):
     t1, _, _, _, d1o, _ = seed_two_tenants(db)
     mac_b = "11:22:33:44:55:66"

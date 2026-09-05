@@ -189,7 +189,7 @@ def apply_policy(result: CollectorResult, rules: PolicyRules) -> tuple[Collector
         )
     ]
     onus = list(result.onus)
-    if rules.collector_blocked("ont_mac_table"):
+    if rules.collector_blocked("ont_mac_table") and rules.collector_blocked("ont_brief"):
         excluded += len(onus)
         onus = []
     identity = result.identity

@@ -20,7 +20,9 @@ from collectors.common.transport import CommandResult, TransportError
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 PAGER_PROMPT = re.compile(
-    r"(?i)--\s*more\s*--|press\s+any\s+key|press\s+enter\s+to\s+next"
+    r"(?i)--\s*more\s*--(?:\s*\([^)]*\))?"
+    r"|press\s+any\s+key(?:\s+to\s+continue)?"
+    r"|press\s+enter\s+to\s+next\s+line\s*,?\s*ctrl\+c\s+to\s+stop"
 )
 # G08: Username(1-64 chars):  — must not match "Username or password error"
 USERNAME_PROMPT = re.compile(
@@ -242,6 +244,7 @@ class InteractiveCliTransport:
                 idle = 0
                 cont = pager_continuation(buf)
                 if cont is not None:
+                    buf = PAGER_PROMPT.sub("\n", buf, count=1)
                     chan.send(cont)
                     continue
                 if looks_like_device_prompt(buf) and echo in buf:
@@ -264,6 +267,7 @@ class InteractiveCliTransport:
                 buf += _decode(chunk)
                 cont = pager_continuation(buf)
                 if cont is not None:
+                    buf = PAGER_PROMPT.sub("\n", buf, count=1)
                     tn.write(cont.encode("ascii"))
                     continue
                 if looks_like_device_prompt(buf) and echo in buf:
@@ -277,12 +281,14 @@ class InteractiveCliTransport:
         lines = text.splitlines()
         out: list[str] = []
         for line in lines:
+            if PAGER_PROMPT.search(line):
+                line = PAGER_PROMPT.sub("\n", line).strip("\r\n")
             stripped = line.strip()
+            if not stripped:
+                continue
             if stripped == echo or stripped.startswith(echo + " "):
                 continue
             if DEVICE_PROMPT.search(stripped):
-                continue
-            if PAGER_PROMPT.search(stripped):
                 continue
             out.append(line)
         return "\n".join(out).strip() + "\n"

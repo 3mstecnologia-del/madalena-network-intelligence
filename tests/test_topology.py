@@ -251,6 +251,38 @@ def test_unilateral_and_bilateral_links(db: Session):
     assert both["counts"]["confirmed"] >= 2
 
 
+def test_self_link_is_conflicting_not_bilateral(db: Session):
+    t1, _, d1, _, _, _ = seed_two_tenants(db)
+    ingest = IngestService(db)
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(interfaces=_ifaces("a", "sfp1", MAC_A)),
+    )
+    ingest.ingest_result(
+        tenant_id=t1.id,
+        device_id=d1.id,
+        result=CollectorResult(
+            topology_links=[
+                NormalizedTopologyLink(
+                    local_interface="sfp1",
+                    remote_mac=MAC_A,
+                    protocol="lldp",
+                    observed_at=_ts(3),
+                )
+            ]
+        ),
+    )
+    db.commit()
+
+    data = QueryService(db).device_links("example-tenant", d1.id)
+
+    assert data["counts"]["confirmed"] == 0
+    assert data["counts"]["conflicting"] == 1
+    assert data["links"][0]["status"] == "conflicting"
+    assert data["links"][0]["conflicts"] == [{"kind": "self_link"}]
+
+
 def test_interface_conflict_is_explicit(db: Session):
     t1, _, d1, _, _, _ = seed_two_tenants(db)
     ingest = IngestService(db)
