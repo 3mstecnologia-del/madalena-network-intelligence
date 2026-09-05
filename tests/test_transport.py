@@ -10,7 +10,11 @@ from collectors.common.transport import (
     sanitize_error,
 )
 from collectors.intelbras_g08.collector import IntelbrasG08Collector
-from collectors.intelbras_g08.readonly import G08_READ_ALLOWLIST
+from collectors.intelbras_g08.readonly import (
+    G08_MAC_TABLE_COMMAND,
+    G08_ONT_BRIEF_COMMAND,
+    G08_READ_ALLOWLIST,
+)
 from collectors.mikrotik.collector import MikroTikCollector
 from collectors.mikrotik.readonly import MIKROTIK_READ_ALLOWLIST
 from collectors.mikrotik.transport_api import (
@@ -261,6 +265,41 @@ def test_g08_driver_uses_table_command_only():
     assert result.meta["command"] == G08_MAC_TABLE_COMMAND
     assert transport.calls == [G08_MAC_TABLE_COMMAND]
     assert len(result.olt_macs) == 2
+
+
+def test_g08_driver_collects_enabled_mac_and_brief_commands():
+    transport = MemoryTransport(
+        {
+            G08_MAC_TABLE_COMMAND: (FIX / "g08_mac_vid_table.txt").read_text(),
+            G08_ONT_BRIEF_COMMAND: (FIX / "g08_ont_brief.txt").read_text(),
+        }
+    )
+
+    result = IntelbrasG08Collector("env", "EXAMPLE").collect_via_transport(
+        transport, enabled_collectors=frozenset({"ont_mac_table", "ont_brief"})
+    )
+
+    assert transport.calls == [G08_MAC_TABLE_COMMAND, G08_ONT_BRIEF_COMMAND]
+    assert result.meta["status"] == "ok"
+    assert result.meta["completeness"] == "complete"
+    assert {(onu.ont_id, onu.status, onu.profile_name) for onu in result.onus} == {
+        ("0/1/14", "online", "CORPORATIVO"),
+        ("0/1/15", "offline", "HOME"),
+    }
+
+
+def test_g08_driver_collects_brief_only_when_enabled():
+    transport = MemoryTransport({G08_ONT_BRIEF_COMMAND: (FIX / "g08_ont_brief.txt").read_text()})
+
+    result = IntelbrasG08Collector("env", "EXAMPLE").collect_via_transport(
+        transport, enabled_collectors=frozenset({"ont_brief"})
+    )
+
+    assert transport.calls == [G08_ONT_BRIEF_COMMAND]
+    assert result.meta["status"] == "ok"
+    assert result.meta["completeness"] == "complete"
+    assert len(result.onus) == 2
+    assert result.olt_macs == []
 
 
 def test_g08_duplicate_service_serial_variant_is_complete():

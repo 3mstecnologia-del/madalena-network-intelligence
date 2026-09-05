@@ -1,6 +1,6 @@
 [project]
 name = "madalena-network-intelligence"
-version = "0.3.1"
+version = "0.4.0"
 description = "Multi-tenant network inventory and correlation platform for Hermes"
 requires-python = ">=3.12"
 

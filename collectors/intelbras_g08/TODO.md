@@ -12,9 +12,8 @@ Live evidence (no private payload): the short form `show ont mac-address` return
 
 Parsed columns when present: MAC-Address, VID (VLAN observation), ONT-ID, SN (ONU serial, not ONT-ID), ID/GEM, PON derived from ONT-ID.
 
-## Other documented read commands (not in the live MAC driver)
+## Other documented read commands
 
-- `show ont brief interface gpon all`
 - `show ont-find list interface gpon all`
 
 ## Open items
