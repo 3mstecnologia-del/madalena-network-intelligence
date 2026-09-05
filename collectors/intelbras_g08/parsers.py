@@ -62,8 +62,17 @@ def parse_ont_mac_address(
     text: str, *, command: str = "show ont mac-address-table interface gpon all", source: str = "olt"
 ) -> list[NormalizedOltMac]:
     """Parse `show ont mac-address` / mac-address-table style tables."""
+    results, _ = parse_ont_mac_address_with_count(text, command=command, source=source)
+    return results
+
+
+def parse_ont_mac_address_with_count(
+    text: str, *, command: str = "show ont mac-address-table interface gpon all", source: str = "olt"
+) -> tuple[list[NormalizedOltMac], int]:
+    """Return distinct service rows and the number of syntactically parsed rows."""
     results: list[NormalizedOltMac] = []
-    seen: set[tuple[str, Optional[str]]] = set()
+    parsed_rows = 0
+    seen: set[tuple[str, Optional[str], Optional[str], Optional[int], Optional[str]]] = set()
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -76,12 +85,13 @@ def parse_ont_mac_address(
         row = _parse_mac_line(line, command=command, source=source)
         if row is None:
             continue
-        key = (row.mac, row.ont_id)
+        parsed_rows += 1
+        key = (row.mac, row.ont_id, row.pon, row.vlan_id, row.gem)
         if key in seen:
             continue
         seen.add(key)
         results.append(row)
-    return results
+    return results, parsed_rows
 
 
 def parse_ont_mac_address_table(text: str) -> list[NormalizedOltMac]:

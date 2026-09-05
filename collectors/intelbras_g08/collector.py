@@ -24,7 +24,7 @@ from collectors.common.types import CollectorResult
 from collectors.intelbras_g08.parsers import (
     onus_from_macs,
     parse_ont_brief,
-    parse_ont_mac_address,
+    parse_ont_mac_address_with_count,
 )
 from collectors.intelbras_g08.readonly import (
     COLLECTOR_VERSION,
@@ -58,14 +58,14 @@ class IntelbrasG08Collector:
         mac_table_text: str = "",
         mac_command: str = G08_MAC_TABLE_COMMAND,
     ) -> CollectorResult:
-        olt_macs = (
-            parse_ont_mac_address(mac_table_text, command=mac_command, source="olt")
+        olt_macs, parsed_rows = (
+            parse_ont_mac_address_with_count(mac_table_text, command=mac_command, source="olt")
             if mac_table_text
-            else []
+            else ([], 0)
         )
         onus = parse_ont_brief(ont_brief_text) if ont_brief_text else onus_from_macs(olt_macs)
         declared = _declared_total(mac_table_text)
-        parse_failures = max(0, declared - len(olt_macs)) if declared is not None else 0
+        parse_failures = abs(declared - parsed_rows) if declared is not None else 0
         if olt_macs and parse_failures == 0:
             completeness = "complete"
         elif olt_macs:
@@ -82,6 +82,7 @@ class IntelbrasG08Collector:
                 "collector_version": self.collector_version,
                 "command": mac_command,
                 "declared_entries": declared,
+                "parsed_entries": parsed_rows,
                 "parse_failures": parse_failures,
                 "completeness": completeness,
             },

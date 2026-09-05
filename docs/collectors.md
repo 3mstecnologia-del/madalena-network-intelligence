@@ -54,6 +54,10 @@ Live HTTP is not exercised in CI. Tests use `MemoryUnifiClient` and synthetic JS
 
 Live collection uses an interactive CLI transport (SSH or Telnet from runtime secrets) behind a show-only allowlist. The G08 driver command is `show ont mac-address-table interface gpon all`. See `collectors/intelbras_g08/TODO.md`.
 
+The prompt-aware transport drives the complete `press ENTER to next line, CTRL+C to stop` marker and removes it only after it has arrived in full, preserving and separating data rows around it. The parser keeps distinct service entries for the same MAC/ONT when VID, GEM, or PON differ; persistence identifies a service by device, MAC, ONT, PON, VID, and GEM so those entries do not overwrite each other. A syntactically parsed duplicate of that service does not count as parser loss: `parsed_entries` records parseable CLI rows, while observations retain the distinct service identity. The collector normalizes MAC, VID, ONT-ID, serial and ID/GEM, derives PON from ONT-ID, and requires parseable rows to equal the CLI `Total entries` counter. Any declared-total mismatch or material parse loss makes the run non-complete.
+
+The MAC-table driver implies ONU inventory (ONT-ID, PON and serial) but does not claim online/offline status or profile data. Those fields remain empty until their own exact read-only command is added and validated.
+
 Do not duplicate `olt-intelbras-g08-ops` skill content here.
 
 ## Adding a collector

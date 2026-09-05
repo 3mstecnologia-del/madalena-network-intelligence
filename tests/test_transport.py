@@ -9,6 +9,7 @@ from collectors.common.transport import (
     TransportError,
     sanitize_error,
 )
+from collectors.intelbras_g08.collector import IntelbrasG08Collector
 from collectors.intelbras_g08.readonly import G08_READ_ALLOWLIST
 from collectors.mikrotik.collector import MikroTikCollector
 from collectors.mikrotik.readonly import MIKROTIK_READ_ALLOWLIST
@@ -260,6 +261,35 @@ def test_g08_driver_uses_table_command_only():
     assert result.meta["command"] == G08_MAC_TABLE_COMMAND
     assert transport.calls == [G08_MAC_TABLE_COMMAND]
     assert len(result.olt_macs) == 2
+
+
+def test_g08_duplicate_service_serial_variant_is_complete():
+    result = IntelbrasG08Collector("env", "EXAMPLE").collect_from_texts(
+        mac_table_text="""\
+MAC-Address         VID  ONT-ID  SN            ID/GEM
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL87654321  1/128
+Total entries: 2
+"""
+    )
+
+    assert len(result.olt_macs) == 1
+    assert result.meta["parse_failures"] == 0
+    assert result.meta["completeness"] == "complete"
+
+
+def test_g08_declared_total_smaller_than_parseable_rows_is_partial():
+    result = IntelbrasG08Collector("env", "EXAMPLE").collect_from_texts(
+        mac_table_text="""\
+MAC-Address         VID  ONT-ID  SN            ID/GEM
+AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
+11-22-33-44-55-66 40   0/1/15  ALCL87654321  2/129
+Total entries: 1
+"""
+    )
+
+    assert result.meta["parse_failures"] == 1
+    assert result.meta["completeness"] == "partial"
 
 
 def test_g08_collect_via_transport():

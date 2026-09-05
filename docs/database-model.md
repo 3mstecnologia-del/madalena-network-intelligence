@@ -15,6 +15,7 @@ Observations are temporal. Upsert keys:
 | `dhcp_leases` | tenant, device, mac, ip |
 | `arp_observations` | tenant, device, mac, ip, **interface** |
 | `mac_observations` | tenant, device, mac, interface |
+| `olt_mac_observations` | tenant, device, mac, ont, pon, VLAN, GEM |
 | `neighbor_observations` | tenant, device, mac, ip, interface, identity, **protocol** |
 | `inventory_node_observations` | tenant, controller device, source_id (else mac) |
 | `topology_observations` | tenant, local device, local interface, remote_mac **or** remote_source_id **or** remote_identity, source, protocol |

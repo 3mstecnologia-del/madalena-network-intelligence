@@ -15,4 +15,4 @@ G08_MAC_COMMANDS: tuple[tuple[str, str], ...] = (
     ("mac_table", G08_MAC_TABLE_COMMAND),
 )
 
-COLLECTOR_VERSION = "0.3.0"
+COLLECTOR_VERSION = "0.3.1"
