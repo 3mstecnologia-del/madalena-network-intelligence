@@ -620,6 +620,15 @@ class IngestService:
         )
         self.db.add(device)
         self.db.flush()
+        # Record the device's trustworthy identifiers (source_id/serial/chassis)
+        # even at first materialization, so cross-collector correlation via
+        # device_identifiers works from the very first ingest, not only after a
+        # subsequent run resolves an existing row by source_ref/MAC.
+        for kind, value in getattr(node, "identifiers", {}).items():
+            self.db.add(DeviceIdentifier(tenant_id=device.tenant_id, device_id=device.id,
+                kind=kind, value=value, source=node.source,
+                first_seen=node.observed_at, last_seen=node.observed_at))
+        self.db.flush()
         return device
 
     def _apply_inventory_identity(self, device: Device, node) -> None:

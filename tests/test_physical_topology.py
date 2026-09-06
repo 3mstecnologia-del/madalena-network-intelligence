@@ -19,7 +19,12 @@ from app.models.entities import (
     PhysicalLink,
 )
 from app.services.ingest import IngestService
-from collectors.common.types import CollectorResult, NormalizedInterface, NormalizedTopologyLink
+from collectors.common.types import (
+    CollectorResult,
+    NormalizedInterface,
+    NormalizedInventoryNode,
+    NormalizedTopologyLink,
+)
 from collectors.mikrotik.collector import MikroTikCollector
 from collectors.mikrotik.parsers import parse_interfaces, parse_neighbors
 from collectors.unifi.collector import UnifiNetworkCollector
@@ -102,6 +107,33 @@ def test_mikrotik_description_chassis_protocol_and_topology_collection():
     assert result.topology_links[0].remote_chassis_id == MAC_SW
 
 
+def test_mikrotik_neighbor_detail_multi_protocol_and_no_chassis():
+    """Reproduce the real `RouterOS 7 /ip neighbor print detail` layout: fields
+    span multiple lines, no discovery at all is rare, and the realistic
+    MikroTik↔MikroTik discovery is `discovered-by=cdp,mndp` (no LLDP, hence no
+    `chassis-id`). The protocol must normalize to cdp and a missing chassis-id
+    must not fail the parse."""
+    text = (
+        " 0 interface=SFP2_REDE_200 mac-address=AA:BB:CC:10:00:02 "
+        'identity="TEST-ROUTER" platform="MikroTik" version="7.16.1 '
+        '(stable) 2024-10-10 14:03:32" unpack=none age=23s uptime=21w '
+        'software-id="Q1TB-SEYJ" board="CCR1016-12G" ipv6=yes '
+        'interface-name="ether2" discovered-by=cdp,mndp\n'
+        " 1 interface=ether1 mac-address=AA:BB:CC:10:00:03 "
+        'identity="TEST-SW" board="CRS328-24P-4S+" discovered-by=mndp\n'
+    )
+    neighbors = parse_neighbors(text)
+    assert len(neighbors) == 2
+    assert neighbors[0].protocol == "cdp"
+    assert neighbors[0].identity == "TEST-ROUTER"
+    assert neighbors[0].platform == "MikroTik"
+    assert neighbors[0].version.startswith("7.16.1")
+    assert neighbors[0].remote_interface == "ether2"
+    assert neighbors[0].chassis_id is None
+    assert neighbors[1].protocol == "mndp"
+    assert neighbors[1].chassis_id is None
+
+
 def test_unifi_serial_ports_uplink_variants_and_categories():
     switch = {
         "id": SW_ID,
@@ -144,6 +176,67 @@ def test_unifi_serial_ports_uplink_variants_and_categories():
     uplink = next(link for link in result.topology_links if link.local_source_id == "TEST-AP-001")
     assert uplink.remote_source_id == SW_ID
     assert uplink.remote_interface == "port-24"
+
+
+def test_unifi_live_payload_feature_list_and_empty_dict_categories():
+    """Reproduce the real Integration v1 payloads: the list endpoint returns
+    `features` as a string list and the detail endpoint as a dict whose flag keys
+    may hold an empty dict (e.g. {"accessPoint": {}}). Categories and uplinks
+    must still resolve even when `type` and `serialNumber` are absent (newer
+    controller builds stop exposing them in the list payload)."""
+    # List payload: features is a list, no type/serialNumber.
+    switch_list = {
+        "id": SW_ID,
+        "name": "TEST-SW",
+        "macAddress": MAC_SW,
+        "model": "US 8 PoE 150W",
+        "features": ["switching"],
+    }
+    ap_list = {
+        "id": "TEST-AP-001",
+        "name": "TEST-AP",
+        "macAddress": "AA:BB:CC:10:00:03",
+        "model": "U6-LR",
+        "features": ["accessPoint"],
+    }
+    # Detail payload: features is a dict with empty flag dicts; uplink present.
+    switch_detail = {
+        **switch_list,
+        "type": "switch",
+        "features": {"switching": {}},
+        "uplink": {"deviceId": "TEST-AP-001"},
+        "interfaces": {
+            "ports": [
+                {
+                    "idx": 24,
+                    "name": "TEST-Port-24",
+                    "connector": "rj45",
+                    "state": "up",
+                    "macAddress": MAC_SW,
+                }
+            ]
+        },
+    }
+    ap_detail = {
+        **ap_list,
+        "type": "ap",
+        "features": {"accessPoint": {}},
+        "uplink": {"deviceId": SW_ID},
+    }
+    result = UnifiNetworkCollector("env", "TEST").collect_from_payloads(
+        devices_payload=[switch_list, ap_list],
+        detail_payloads=[switch_detail, ap_detail],
+    )
+    by_id = {node.source_id: node for node in result.inventory_nodes}
+    assert by_id[SW_ID].category == "unifi_switch"
+    assert by_id["TEST-AP-001"].category == "unifi_ap"
+    # serial absent from list payload is preserved as None (Integration v1).
+    assert by_id[SW_ID].serial is None
+    assert by_id["TEST-AP-001"].serial is None
+    assert {node.source_id for node in result.inventory_nodes} == {SW_ID, "TEST-AP-001"}
+    links_by_local = {link.local_source_id: link for link in result.topology_links}
+    assert links_by_local[SW_ID].remote_source_id == "TEST-AP-001"
+    assert links_by_local["TEST-AP-001"].remote_source_id == SW_ID
 
 
 def test_multisource_and_reverse_observations_create_one_physical_link(db: Session):
@@ -274,3 +367,33 @@ def test_interfaces_and_physical_links_api_isolated_paginated_and_historical(db:
         assert client.get("/physical-links", params={"tenant": "other-tenant"}).json()["items"] == []
     finally:
         app.dependency_overrides.clear()
+
+
+def test_new_inventory_device_records_identifiers_at_first_ingest(db: Session):
+    """A UniFi node materializing a brand-new Device must write a
+    device_identifiers row (source_id/serial) immediately — not only on a later
+    run when the device already resolves by source_ref/MAC. Regression for the
+    live UNIPLAC ingest where every device was new and device_identifiers stayed
+    empty."""
+    tenant, _, controller, *_ = seed_two_tenants(db)
+    controller.source_ref = "TEST-UNIFI-CONTROLLER"
+    ingest = IngestService(db)
+    result = CollectorResult(
+        inventory_nodes=[
+            NormalizedInventoryNode(
+                source_id=SW_ID,
+                name="TEST-SW",
+                mac=MAC_SW,
+                category="unifi_switch",
+                source="unifi_inventory",
+                identifiers={"source_id": SW_ID},
+                observed_at=_ts(3),
+            )
+        ]
+    )
+    ingest.ingest_result(tenant_id=tenant.id, device_id=controller.id, result=result)
+    db.commit()
+    device = db.scalar(select(Device).where(Device.source_ref == SW_ID))
+    assert device is not None
+    identifiers = list(db.scalars(select(DeviceIdentifier).where(DeviceIdentifier.device_id == device.id)))
+    assert any(i.kind == "source_id" and i.value == SW_ID for i in identifiers)

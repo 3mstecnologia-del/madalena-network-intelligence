@@ -29,6 +29,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Interface model gained alert/observability columns in this migration;
+    # the (pre-existing) interfaces table must get them too, or persistence
+    # fails with UndefinedColumn once the model writes description/source.
+    op.add_column("interfaces", sa.Column("description", sa.Text()))
+    op.add_column("interfaces", sa.Column("source", sa.String(64), server_default="unknown"))
+    op.add_column(
+        "interfaces",
+        sa.Column("source_identifiers", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+    )
+    op.add_column(
+        "interfaces", sa.Column("collection_run_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("collection_runs.id"))
+    )
+
     op.create_table(
         "interface_observations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -113,6 +126,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("interfaces", "collection_run_id")
+    op.drop_column("interfaces", "source_identifiers")
+    op.drop_column("interfaces", "source")
+    op.drop_column("interfaces", "description")
     op.drop_index("ix_link_evidence_link_id", table_name="link_evidence")
     op.drop_index("ix_link_evidence_tenant_id", table_name="link_evidence")
     op.drop_table("link_evidence")

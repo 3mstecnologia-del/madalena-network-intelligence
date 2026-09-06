@@ -327,7 +327,9 @@ def parse_neighbors(text: str) -> list[NormalizedNeighbor]:
                     identity=ident,
                     platform=_clean_opt(stanza.get("platform") or stanza.get("board")),
                     version=_clean_opt(stanza.get("version")),
-                    protocol=_normalize_protocol(stanza.get("discoverer") or stanza.get("protocol")),
+                    protocol=_normalize_protocol(
+                        stanza.get("discovered-by") or stanza.get("discoverer") or stanza.get("protocol")
+                    ),
                     chassis_id=_safe_mac(stanza.get("chassis-id"))
                     or _clean_opt(stanza.get("chassis-id")),
                 )
@@ -339,13 +341,14 @@ def _normalize_protocol(value: Optional[str]) -> Optional[str]:
     raw = (value or "").strip().lower()
     if not raw:
         return None
-    if "lldp" in raw:
-        return "lldp"
-    if "cdp" in raw:
-        return "cdp"
-    if "mndp" in raw:
-        return "mndp"
-    return raw.split()[0]
+    # Multi-protocol output (e.g. "cdp,mndp" from /ip neighbor print detail)
+    # is normalized to the union, priority-ordered: lldp > cdp > mndp.
+    tokens = re.split(r"[,;]", raw)
+    present = [t.strip() for t in tokens if t.strip()]
+    for candidate in ("lldp", "cdp", "mndp"):
+        if candidate in present or any(candidate in t for t in present):
+            return candidate
+    return present[0] if present else raw.split()[0]
 
 
 def _safe_mac(value: Optional[str]) -> Optional[str]:

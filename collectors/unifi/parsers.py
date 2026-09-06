@@ -53,13 +53,25 @@ def parse_device_payload(item: Any) -> Optional[NormalizedInventoryNode]:
     if isinstance(uplink, dict):
         uplink_port = _clean(uplink.get("portIdx"))
     uplink_port = uplink_port or _clean(item.get("uplinkPortIdx"))
-    features = item.get("features") if isinstance(item.get("features"), dict) else {}
+    features = item.get("features") if isinstance(item.get("features"), (dict, list)) else None
     kind = _clean(item.get("type")) or ""
-    if features.get("switching") or kind.lower() in {"switch", "usw"}:
+
+    def _feature_flag(key: str) -> bool:
+        # Integration v1 returns features as a list (e.g. ["accessPoint"]) in the
+        # list payload and as a dict whose keys are the flags in the detail
+        # payload (e.g. {"accessPoint": {}}). Detect by key presence, not value
+        # truthiness: {"accessPoint": {}} is a flag even though the dict is empty.
+        if isinstance(features, list):
+            return key in features
+        if isinstance(features, dict):
+            return key in features
+        return False
+
+    if _feature_flag("switching") or kind.lower() in {"switch", "usw", "sw"}:
         category = "unifi_switch"
-    elif features.get("accessPoint") or kind.lower() in {"ap", "uap"}:
+    elif _feature_flag("accessPoint") or kind.lower() in {"ap", "uap"}:
         category = "unifi_ap"
-    elif kind.lower() in {"gateway", "ugw", "udm"}:
+    elif kind.lower() in {"gateway", "ugw", "udm"} or _feature_flag("gateway"):
         category = "unifi_gateway"
     else:
         category = "unifi_device"
