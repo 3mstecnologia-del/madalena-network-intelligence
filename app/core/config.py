@@ -1,4 +1,6 @@
 from functools import lru_cache
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,11 +14,13 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     scheduler_mikrotik_interval_sec: int = 900
     scheduler_olt_interval_sec: int = 1800
+    scheduler_unifi_interval_sec: int = 1800
     scheduler_full_inventory_interval_sec: int = 21600
     mcp_http_host: str = "0.0.0.0"
     mcp_http_port: int = 8081
     seed_tenant_slug: str = "example-tenant"
     seed_site_slug: str = "example-site"
+    seed_exclude_vlan: Optional[str] = None
 
 
 @lru_cache

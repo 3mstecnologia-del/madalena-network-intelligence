@@ -1,0 +1,16 @@
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "macAddress": "AA:BB:CC:20:00:01",
+  "ipAddress": "10.30.2.10",
+  "name": "LAB-UNIFI-SW",
+  "model": "USW-24",
+  "state": "ONLINE",
+  "type": "usw",
+  "firmwareVersion": "7.0.0",
+  "interfaces": {
+    "ports": [
+      {"idx": 1, "state": "UP", "connector": "RJ45"},
+      {"idx": 24, "state": "UP", "connector": "SFP"}
+    ]
+  }
+}

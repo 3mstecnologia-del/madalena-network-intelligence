@@ -1,0 +1,53 @@
+---
+description: Purpose of Madalena Network Intelligence — what this repo is, is not, and must never assume
+alwaysApply: true
+---
+
+# Purpose
+
+Madalena Network Intelligence is a **multi-tenant network observability and correlation** system.
+
+Central job: turn evidence from multiple network sources into **queryable knowledge** for Madalena/Hermes.
+
+```
+MikroTik fleet (DHCP, ARP, FDB, interfaces, neighbors)
+OLT (MAC, ONU/ONT, PON, VLAN)
+        → normalized observations
+        → PostgreSQL
+        → correlation / history
+        → API + MCP
+        → Madalena
+```
+
+The product **must not assume** where an endpoint lives. It **discovers by evidence**.
+
+## This repo is
+
+- Periodic **read-only** collectors + normalization + temporal persistence
+- Correlation/query over observations
+- REST API + MCP using the **same** application/query layer
+
+## This repo is not
+
+- A replacement for `hermes-3ms-skills` (those teach Hermes how to operate gear)
+- A current-state-only inventory that erases history
+- A place for customer credentials, lab dumps, or client topology in Git
+- An SSH/Telnet shell as a service
+
+## Hard product invariants
+
+- Tenant is required on every query path
+- Device collectors are read-only (positive allowlist; no arbitrary commands)
+- Multiple MikroTiks per tenant are normal; never hardcode “DHCP lives on router X”
+- Observations are temporal; absence in one run ≠ removal
+- Ambiguity and conflicts are represented, never silently picked
+- No client-specific operational knowledge in public code (VLAN names, which router is DHCP, real IPs)
+
+## Canonical docs (do not duplicate here)
+
+- Architecture: `docs/architecture/overview.md`
+- Testing: `docs/testing/strategy.md`
+- New collector: `docs/development/adding-a-collector.md`
+- Agent entry: `AGENTS.md`
+
+Global 3MS User Rules already cover Docker-first, secrets, Git, and infra. Do not repeat them.

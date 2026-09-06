@@ -1,0 +1,4 @@
+Flags: D - dynamic
+ 0   interface=ether1 mac-address=AA:BB:CC:10:00:02 address=10.30.2.2 identity=LAB-MK-B platform=MikroTik version=7.15 interface-name=sfp2 discoverer=lldp
+ 1   interface=ether2 mac-address=AA:BB:CC:20:00:01 address=10.30.2.10 identity=LAB-UNIFI-SW platform=USW interface-name=Port 24 discoverer=mndp
+ 2   interface=ether3 mac-address=AA:BB:CC:33:00:01 identity=cisco-lab platform=Cisco IOS discoverer=cdp

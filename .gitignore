@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+acessos.env
+**/acessos.env
 secrets/
 credentials/
 *.pem
@@ -25,9 +27,14 @@ venv/
 .idea/
 .vscode/
 
-# Lab dumps (never commit)
+# Lab dumps and runtime data (never commit)
 *.backup
 *.rsc
 running-config*
 bkp*
 *.pdf
+lab-captures/
+*.capture
+*.dump
+*.sql
+pgdata/

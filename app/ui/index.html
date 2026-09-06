@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Madalena Intelligence — Grafo de infraestructura</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot-logo"></span>
+      <span>Madalena <b>Intelligence</b></span>
+      <span class="sub">Grafo de infraestructura</span>
+    </div>
+    <div class="topbar-right">
+      <label class="tenant-label" for="tenant">Tenant</label>
+      <select id="tenant"></select>
+      <input id="search" type="search" placeholder="Buscar equipamento…" autocomplete="off" />
+      <button id="fit" class="btn" title="Ajustar vista">⤢ Ajustar</button>
+    </div>
+  </header>
+
+  <div class="filterbar">
+    <span class="filter-title">Tipos</span>
+    <div id="type-filters" class="filters"></div>
+    <span class="filter-title">Relações</span>
+    <div id="edge-filters" class="filters"></div>
+  </div>
+
+  <div class="layout">
+    <div id="cy" class="cy"></div>
+    <aside id="side" class="side hidden">
+      <div class="side-head">
+        <span class="side-kind" id="side-kind"></span>
+        <button id="side-close" class="btn" title="Cerrar">✕</button>
+      </div>
+      <h2 id="side-title"></h2>
+      <dl class="side-dl" id="side-dl"></dl>
+      <section class="side-section">
+        <h3>Relações conhecidas</h3>
+        <ul id="side-rels" class="side-rels"></ul>
+      </section>
+      <section class="side-section">
+        <h3>Fonte / evidências</h3>
+        <ul id="side-evid" class="side-rels"></ul>
+      </section>
+      <div class="side-counts" id="side-counts"></div>
+    </aside>
+  </div>
+
+  <div id="legend" class="legend">
+    <div class="legend-title">Legenda</div>
+    <ul id="legend-list"></ul>
+  </div>
+
+  <div id="statusbar">Cargando grafo…</div>
+
+  <script src="vendor/cytoscape.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

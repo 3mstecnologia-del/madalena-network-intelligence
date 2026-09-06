@@ -1,6 +1,6 @@
 [project]
 name = "madalena-network-intelligence"
-version = "0.1.0"
+version = "0.4.0"
 description = "Multi-tenant network inventory and correlation platform for Hermes"
 requires-python = ">=3.12"
 
@@ -9,8 +9,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
+ignore = ["B008"]

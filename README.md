@@ -2,14 +2,20 @@
 
 Multi-tenant network inventory and correlation platform for **Madalena / Hermes** (3MS Tecnologia).
 
-Answer questions like *"Where does MAC AA:BB:CC:DD:EE:FF come from?"* by correlating DHCP, ARP, bridge/FDB, and OLT/ONU observations — without destroying raw history.
+This is **not** a current-state-only inventory. Raw observations are kept so you can answer:
+
+- where is this MAC now, and where was it before?
+- which IPs did it use, on which device and interface?
+- which observations (source + collection run) support that correlation?
+
+Absence of a later observation is not treated as proof the device is gone.
 
 ## Skill vs Collector vs MCP
 
 | Piece | Responsibility |
 |-------|----------------|
 | **Skill** (`hermes-3ms-skills`) | Teaches Hermes how to *operate* equipment |
-| **Collector** (this repo) | Collects and normalizes data automatically |
+| **Collector** (this repo) | Collects and normalizes data automatically (read-only) |
 | **MCP** (`mcp_server`) | Lets Hermes *query* the structured inventory |
 
 No circular dependency: skills may call this MCP later; this project does not embed skills.
@@ -21,8 +27,10 @@ flowchart TB
   subgraph sources [Collectors]
     MK[MikroTik RouterOS]
     G08[Intelbras G08]
+    UNI[UniFi Network]
   end
   SCH[Scheduler]
+  NORM[Normalization]
   PG[(PostgreSQL)]
   CORR[Correlation Engine]
   API[REST API]
@@ -31,8 +39,11 @@ flowchart TB
 
   SCH --> MK
   SCH --> G08
-  MK --> PG
-  G08 --> PG
+  SCH --> UNI
+  MK --> NORM
+  G08 --> NORM
+  UNI --> NORM
+  NORM --> PG
   PG --> CORR
   CORR --> API
   CORR --> MCP
@@ -40,7 +51,9 @@ flowchart TB
   MCP --> HERMES
 ```
 
-Multi-tenant model: **Tenant → Site → Device → observations**.
+Multi-tenant model: **Tenant → Site → Device → observations**. Every operational query requires `tenant`.
+
+Product architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md). Implementation snapshot: [`docs/architecture.md`](docs/architecture.md). Also: [`docs/collectors.md`](docs/collectors.md), [`docs/database-model.md`](docs/database-model.md), [`docs/runtime-configuration.md`](docs/runtime-configuration.md), [`docs/mcp.md`](docs/mcp.md).
 
 ## Requirements (host)
 
@@ -50,34 +63,33 @@ Multi-tenant model: **Tenant → Site → Device → observations**.
 
 No host Python, pip, Node, npm, or PostgreSQL installs.
 
-## Quick start
+## Quick start (lab)
+
+Madalena VPS: [`docs/operations/madalena-deployment.md`](docs/operations/madalena-deployment.md).
 
 ```bash
 cp .env.example .env
-docker compose config
-docker compose build
-docker compose up -d
-docker compose run --rm migrate
-docker compose run --rm api python -m scripts.seed_lab
-docker compose run --rm --no-deps api pytest -q
-curl -sf http://127.0.0.1:8000/health
-curl -sf http://127.0.0.1:8081/health
+chmod +x scripts/bootstrap.sh scripts/validate-deployment.sh
+SEED=true ./scripts/bootstrap.sh
+./scripts/validate-deployment.sh
 ```
 
-Or via Makefile wrappers: `make build up migrate test seed secret-scan`.
+Makefile: `make test secret-scan test-persist`. Deploy helpers: `make bootstrap` / `make validate-deploy`.
 
 ## API endpoints
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/health` | Liveness |
+| GET | `/health` | Process up |
+| GET | `/ready` | Database reachable |
 | GET | `/tenants` | List tenants |
-| GET | `/devices?tenant=` | Tenant-scoped |
-| GET | `/devices/{id}?tenant=` | |
-| GET | `/macs?tenant=` | |
-| GET | `/macs/{mac}?tenant=` | Correlated view |
+| GET | `/devices?tenant=&limit=&offset=` | Tenant-scoped |
+| GET | `/devices/{id}?tenant=` | No credential/host refs |
+| GET | `/macs?tenant=&limit=&offset=` | |
+| GET | `/macs/{mac}?tenant=` | Correlated view + conflicts |
+| GET | `/macs/{mac}/history?tenant=` | Timeline + provenance |
 | GET | `/ips/{ip}?tenant=` | |
-| GET | `/collection-runs?tenant=` | |
+| GET | `/collection-runs?tenant=&limit=&offset=` | Completeness + command counts |
 | GET | `/docs` | OpenAPI UI |
 
 ## MCP tools
@@ -89,19 +101,27 @@ HTTP base: `http://127.0.0.1:8081`
 - `POST /tools/get_device`
 - `POST /tools/list_devices`
 - `POST /tools/list_tenant_network_assets`
-- `POST /tools/get_mac_history`
-- `POST /tools/get_collection_status`
+- `POST /tools/get_mac_history` — timeline with provenance
+- `POST /tools/get_collection_status` — completeness + freshness
+- `POST /tools/get_device_neighbors`
+- `POST /tools/get_device_links`
+- `POST /tools/get_topology`
 
 `GET /tools` lists them. Tenant is always required.
 
 ## First lab tenant
 
-Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real UNIPLAC credentials or IPs in this repository**.
+Seed uses placeholder labels from `.env` (`SEED_TENANT_SLUG`, etc.). Example devices get Infisical-style `secret_prefix` references only — **no real customer credentials or IPs in this repository**.
+
+Runtime secrets: inject `{PREFIX}_HOST`, `{PREFIX}_USERNAME`, `{PREFIX}_PASSWORD` in the private `.env` (gitignored). See [`docs/runtime-configuration.md`](docs/runtime-configuration.md).
 
 ## Collectors
 
-- **MikroTik**: DHCP leases, ARP, bridge FDB parsers + collector scaffold (ROS7). Live SSH/REST transport TODO.
-- **Intelbras G08**: ONT brief + MAC table parsers using commands documented in `olt-intelbras-g08-ops` skill. Live transport TODO; see `collectors/intelbras_g08/TODO.md`.
+- **MikroTik**: identity, interfaces, ARP, DHCP leases, bridge/FDB, neighbors. Parsers are transport-agnostic. Live path is generic SSH behind a read-only allowlist (`ReadOnlyTransport`). Tests use `MemoryTransport`.
+- **UniFi Network**: Integration API GET (sites, devices, optional detail/uplink/ports). Live HTTP uses runtime `BASE_URL` + `API_KEY`. Tests use `MemoryUnifiClient`.
+- **Intelbras G08**: ONT MAC table via `show ont mac-address-table interface gpon all` (read-only allowlist). Do not invent other G08 commands.
+
+How to add a collector: [`docs/development/adding-a-collector.md`](docs/development/adding-a-collector.md). Specs: [`docs/collectors.md`](docs/collectors.md).
 
 ## Monitoring integrations
 
@@ -116,6 +136,18 @@ SNMP communities, host IPs, and credentials stay in Zabbix/Infisical — never i
 ## Hermes integration (future)
 
 Skills such as `mikrotik-routeros-ops` / `olt-intelbras-g08-ops` may call this MCP to locate MAC/IP/ONU context before operational changes. Do not embed this codebase inside the skills repo.
+
+## Development standards
+
+How this product is developed, tested, and evolved (not a copy of the global 3MS User Rule):
+
+- Cursor Project Rules: [`.cursor/rules/`](.cursor/rules/)
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- Testing: [`docs/testing/strategy.md`](docs/testing/strategy.md)
+- Local Docker ops: [`docs/operations/local-development.md`](docs/operations/local-development.md)
+- Madalena deploy: [`docs/operations/madalena-deployment.md`](docs/operations/madalena-deployment.md)
+- Agent map: [`AGENTS.md`](AGENTS.md)
 
 ## Security
 

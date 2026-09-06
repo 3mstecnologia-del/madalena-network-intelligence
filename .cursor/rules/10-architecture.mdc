@@ -1,0 +1,35 @@
+---
+description: Layer boundaries for Network Intelligence — transport through API/MCP
+alwaysApply: true
+---
+
+# Architecture boundaries
+
+Preserve this pipeline. Do not collapse layers.
+
+```
+runtime configuration
+  → transport
+  → collector
+  → parser
+  → normalization / domain
+  → policy filter
+  → persistence
+  → correlation / query
+  → API / MCP
+```
+
+| Layer | May | Must not |
+|-------|-----|----------|
+| **Transport** | Speak a protocol; return raw text + exit/timeout | Know customer rules; parse business meaning; become a remote shell |
+| **Collector** | Orchestrate **allowlisted** reads; classify completeness | Contain API/MCP/query logic; accept arbitrary commands from API, MCP, DB, or tenant config |
+| **Parser** | Turn raw text into structures; tolerate **explicitly** known layouts | Do network I/O; mutate devices; treat malformed input as a reason to retry with a write |
+| **Domain** | Canonical MAC/IP/interface IDs; observation semantics; provenance | Encode a named customer's topology |
+| **Policy** | Drop out-of-scope observations (VLAN/CIDR/source/collector/interface) | Persist first and hide later in the API |
+| **Persistence** | Store facts + time; upsert without deleting history | Silently decide “the truth” when evidence conflicts |
+| **Correlation** | Join evidence; expose ambiguity | Invent certainty; hide conflicting observations |
+| **API / MCP** | Expose the query layer | Reimplement correlation in a second copy |
+
+Runtime secrets are injected outside Git (`secret_provider` + `secret_prefix` only in the database). See `docs/runtime-configuration.md` when that file exists, else `docs/architecture/overview.md`.
+
+Details: `docs/architecture/overview.md`.

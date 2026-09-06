@@ -1,0 +1,33 @@
+---
+description: Test matrix, fixtures, lab isolation, and definition of done for this product
+globs: tests/**,scripts/test_*.py,scripts/*scan*.py,Makefile
+alwaysApply: false
+---
+
+# Testing and definition of done
+
+Full matrix: `docs/testing/strategy.md`.
+
+| Category | Covers |
+|----------|--------|
+| UNIT | parsers, normalization, correlation, sanitization, policy filters |
+| INTEGRATION | PostgreSQL, migrations, persistence, history, tenant isolation, API, MCP |
+| TRANSPORT | success, timeout, EOF, auth failure, malformed/partial output, custom port, read-only allowlist |
+| COLLECTOR | complete / partial / failed / indeterminate; idempotent re-run |
+| SECURITY | cross-tenant, command injection, secret redaction, unsafe command blocked |
+| PERSISTENCE | DB restart, repeated ingest, temporal history, no artificial duplication |
+| REAL LAB | optional, private credentials, **not** public CI, **never** Git fixtures |
+
+Public tests run in Docker (`make test`). Lab targets (`lab-collect`, `lab-validate`) stay out of public CI.
+
+A feature is not DONE because code exists. Proportional DoD:
+
+- implementation + relevant tests
+- migration if schema changed
+- docs/contract updated
+- tenant isolation checked
+- errors sanitized
+- real application path exercised (API/MCP, not SQL-only, when those are the consumers)
+- no private data in the diff
+
+Collectors: **IMPLEMENTATION** ≠ **TEST** ≠ **LAB VALIDATION** ≠ **OPERATIONAL VALIDATION**.

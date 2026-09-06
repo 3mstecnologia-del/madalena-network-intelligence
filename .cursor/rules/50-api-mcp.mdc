@@ -1,0 +1,35 @@
+---
+description: API and MCP contracts — shared query layer, tenant, pagination, sanitization
+globs: app/api/**,mcp_server/**,mcp/**
+alwaysApply: false
+---
+
+# API and MCP
+
+API is the public product contract. MCP is the operational interface for Madalena.
+
+Both use the **same** `QueryService` / correlation layer. Do not grow a parallel query implementation inside `mcp_server`.
+
+Tenant is required. Do not return secrets, `secret_prefix`, passwords, or management host refs.
+
+## API
+
+Schema/endpoint changes need: compatibility review, tests, OpenAPI, tenant checks, ambiguity handling, provenance when the view is correlated.
+
+Paginate lists that can grow (devices, MACs, collection runs).
+
+## MCP
+
+Current conceptual tools: `find_mac`, `find_ip`, `get_mac_history`, `get_collection_status` (plus inventory helpers already exposed).
+
+MCP changes need: documented contract, tests, tenant isolation, sanitized responses.
+
+Tool list and HTTP notes: `docs/mcp.md`.
+
+## Versioned contracts
+
+API, MCP, database, collector output, and normalization semantics are contracts. No silent breaking changes — document them.
+
+## Performance
+
+Pagination and query-relevant indexes are standard. Do not micro-optimize without measuring a real bottleneck and adding an appropriate test/benchmark. Correctness and provenance stay first.

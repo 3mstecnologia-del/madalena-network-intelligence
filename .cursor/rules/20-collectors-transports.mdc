@@ -1,0 +1,44 @@
+---
+description: Read-only collectors, allowlists, MikroTik fleet, and OLT driver contracts
+globs: collectors/**,scheduler/**,scripts/lab_*.py
+alwaysApply: false
+---
+
+# Collectors and transports
+
+Device collection is **READ-ONLY**. Positive allowlist is mandatory.
+
+Never accept an arbitrary command from API, MCP, request body, tenant config, database, or a remote user. Transport is not “SSH as a service”.
+
+Protocol fallback (SSH vs Telnet vs API) must be **configured and tested**. Do not add opportunistic fallback onto destructive or unproven commands.
+
+CODE PASS ≠ LIVE PASS. Lab validation is optional, private, and never writes real output into Git fixtures.
+
+## MikroTik
+
+- Support **many routers per tenant**. Never assume “this tenant’s DHCP is on MikroTik X”.
+- The same MAC on multiple devices is information, not automatically an error.
+- Allow only explicitly supported **read** operations (print/get style). No `add` / `set` / `remove` / `enable` / `disable` / `move`.
+- Parser failure must not trigger a mutable fallback command.
+
+## Intelbras G08 (OLT)
+
+OLT is an independent source. Driver/family/version defines supported behavior — do not “try commands until one works”.
+
+Proven MAC-table command for this family:
+
+`show ont mac-address-table interface gpon all`
+
+Do not confuse **ONT-ID**, **serial (SN)**, **GEM**, **PON/interface**, **VID**. Multiple MACs behind one ONU are normal.
+
+## Completeness
+
+Every run must classify honestly: **complete | partial | failed | indeterminate**.
+
+If the command ran but the parser dropped lines, it is **not** complete. Record seen/created/updated, parse failures, sanitized errors, timestamps, collector version, device/source.
+
+Current `collection_runs` also stores `status` plus `completeness` (`complete` / `partial` / `none` / `unknown`). Keep the classification honest; renaming enums is a versioned contract, not a silent change.
+
+## Adding a collector
+
+Follow `docs/development/adding-a-collector.md`. Collector field docs: `docs/collectors.md`.

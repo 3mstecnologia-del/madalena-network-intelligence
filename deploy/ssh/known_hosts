@@ -1,0 +1,2 @@
+# Runtime known_hosts for container SSH. Do not put real host keys in Git.
+# On the VPS, point NI_SSH_KNOWN_HOSTS_FILE at a private file outside this repo.

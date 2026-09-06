@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.models.entities import DataSource, Device, DeviceCredentialReference, Site, Tenant
+from app.models.entities import DataSource, Device, DeviceCredentialReference, ExclusionPolicy, Site, Tenant
 
 
 def main() -> None:
@@ -55,11 +55,33 @@ def main() -> None:
             return d
 
         ensure_device("LAB-MK", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK")
-        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_EXAMPLE_OLT_G08")
+        ensure_device("LAB-MK-B", "mikrotik", "MikroTik", "RouterOS7", "DEVICE_EXAMPLE_MIKROTIK_B")
+        ensure_device("LAB-G08", "intelbras_g08", "Intelbras", "G08", "DEVICE_EXAMPLE_OLT")
+        ensure_device("LAB-UNIFI", "unifi_network", "Ubiquiti", "UniFi-Network", "DEVICE_EXAMPLE_UNIFI")
+
+        vlan_raw = (settings.seed_exclude_vlan or "").strip()
+        if vlan_raw:
+            existing = db.scalar(
+                select(ExclusionPolicy).where(
+                    ExclusionPolicy.tenant_id == tenant.id,
+                    ExclusionPolicy.rule_type == "vlan",
+                    ExclusionPolicy.rule_value == vlan_raw,
+                )
+            )
+            if existing is None:
+                db.add(
+                    ExclusionPolicy(
+                        tenant_id=tenant.id,
+                        rule_type="vlan",
+                        rule_value=vlan_raw,
+                        enabled=True,
+                    )
+                )
 
         for code, name, ctype in [
             ("mikrotik_dhcp", "MikroTik DHCP", "mikrotik"),
             ("intelbras_g08_mac", "Intelbras G08 MAC", "intelbras_g08"),
+            ("unifi_network", "UniFi Network", "unifi_network"),
         ]:
             ds = db.scalar(
                 select(DataSource).where(DataSource.tenant_id == tenant.id, DataSource.code == code)
