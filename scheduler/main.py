@@ -33,6 +33,7 @@ log = logging.getLogger("scheduler")
 
 HEARTBEAT_PATH = Path("/tmp/ni-scheduler-heartbeat")
 HEARTBEAT_MAX_AGE_SEC = 120
+BEAT_INTERVAL_SEC = 30
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -41,6 +42,24 @@ _scheduler: Optional[BlockingScheduler] = None
 
 def write_heartbeat() -> None:
     HEARTBEAT_PATH.write_text(str(time.time()), encoding="utf-8")
+
+
+def _heartbeat_loop() -> None:
+    while True:
+        write_heartbeat()
+        time.sleep(BEAT_INTERVAL_SEC)
+
+
+def _start_heartbeat_thread() -> threading.Thread:
+    """Keep the healthcheck meaningful between collection ticks.
+
+    A <120s-stale heartbeat must reflect a live scheduler process, not whether a
+    collection happened to run recently (ticks are every 900-21600s). Returns the
+    daemon thread so the caller holds a reference.
+    """
+    thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+    thread.start()
+    return thread
 
 
 def heartbeat_fresh(max_age_sec: int = HEARTBEAT_MAX_AGE_SEC) -> bool:
@@ -280,6 +299,7 @@ def main() -> None:
     once = "--once" in sys.argv
     if not settings.scheduler_enabled and not once:
         log.info("SCHEDULER_ENABLED=false — idling")
+        _start_heartbeat_thread()
         while True:
             write_heartbeat()
             time.sleep(30)
@@ -288,6 +308,7 @@ def main() -> None:
         run_olt()
         run_unifi()
         return
+    _start_heartbeat_thread()
     _scheduler = BlockingScheduler(timezone="UTC")
     _scheduler.add_job(
         run_mikrotik_lightweight,

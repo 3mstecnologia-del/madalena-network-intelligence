@@ -1,5 +1,5 @@
 # All targets wrap Docker — no host Python/pip required.
-.PHONY: build up down logs migrate test lint format config seed secret-scan private-data-scan test-persist lab-collect lab-validate lab-diag bootstrap validate-deploy
+.PHONY: build up down logs migrate test lint format config seed secret-scan private-data-scan test-persist lab-collect lab-validate lab-diag bootstrap validate-deploy register-devices
 
 build:
 	docker compose build
@@ -40,6 +40,9 @@ private-data-scan:
 bootstrap:
 	chmod +x scripts/bootstrap.sh scripts/validate-deployment.sh
 	./scripts/bootstrap.sh
+
+register-devices:
+	docker compose run --rm --no-deps api python -m scripts.register_devices $(ARGS)
 
 validate-deploy:
 	chmod +x scripts/validate-deployment.sh

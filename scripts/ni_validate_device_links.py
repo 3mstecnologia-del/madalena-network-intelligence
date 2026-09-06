@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from sqlalchemy import select
+
 import httpx
+from sqlalchemy import select
 
 from app.core.db import SessionLocal
 from app.models.entities import Device, Tenant
@@ -48,7 +49,13 @@ def main() -> int:
                     value = os.environ.get(key) or ""
                     if len(value) >= 4 and value in serialized:
                         secret_hits.append(key)
-            item_ok = api.status_code == 200 and mcp.status_code == 200 and bool((mcp_json or {}).get("ok")) and equal and not secret_hits
+            item_ok = (
+                api.status_code == 200
+                and mcp.status_code == 200
+                and bool((mcp_json or {}).get("ok"))
+                and equal
+                and not secret_hits
+            )
             ok = ok and item_ok
             report["devices"].append(
                 {

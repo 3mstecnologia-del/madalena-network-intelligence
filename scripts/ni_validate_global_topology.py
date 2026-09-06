@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+
 import httpx
 from sqlalchemy import select
 
@@ -39,7 +40,13 @@ def main() -> int:
             checked.append(key)
             if len(value) >= 4 and value in serialized:
                 hits.append(key)
-    ok = api.status_code == 200 and mcp.status_code == 200 and mcp_json.get("ok") is True and api_json == mcp_data and not hits
+    ok = (
+        api.status_code == 200
+        and mcp.status_code == 200
+        and mcp_json.get("ok") is True
+        and api_json == mcp_data
+        and not hits
+    )
     print(
         json.dumps(
             {

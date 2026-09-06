@@ -18,7 +18,6 @@ from collectors.common.transport import (
     ReadOnlyViolation,
     Transport,
     TransportError,
-    sanitize_error,
 )
 from collectors.common.types import CollectorResult
 from collectors.intelbras_g08.parsers import (
@@ -108,7 +107,7 @@ class IntelbrasG08Collector:
                 continue
             try:
                 response = guarded.execute(command)
-            except (ReadOnlyViolation, TransportError) as exc:
+            except (ReadOnlyViolation, TransportError):
                 failures += 1
                 continue
             if not response.ok or not (response.stdout or "").strip():

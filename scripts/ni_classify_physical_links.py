@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models.entities import Device, InventoryNodeObservation, Tenant, TopologyObservation
 from app.correlation.topology import TopologyCorrelator
+from app.models.entities import Device, InventoryNodeObservation, Tenant, TopologyObservation
 
 
 def main() -> int:
