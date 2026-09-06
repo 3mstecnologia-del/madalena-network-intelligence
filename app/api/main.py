@@ -123,6 +123,48 @@ def get_device_links(
     return data
 
 
+@app.get("/interfaces")
+def list_interfaces(
+    tenant: str = Query(...),
+    device_id: UUID | None = Query(None),
+    include_history: bool = Query(False),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        return QueryService(db).list_interfaces(
+            tenant,
+            device_id=device_id,
+            include_history=include_history,
+            limit=limit,
+            offset=offset,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/physical-links")
+def list_physical_links(
+    tenant: str = Query(...),
+    device_id: UUID | None = Query(None),
+    include_history: bool = Query(False),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    try:
+        return QueryService(db).list_physical_links(
+            tenant,
+            device_id=device_id,
+            include_history=include_history,
+            limit=limit,
+            offset=offset,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/topology")
 def get_topology(
     tenant: str = Query(...),

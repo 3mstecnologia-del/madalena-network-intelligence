@@ -48,17 +48,36 @@ def parse_device_payload(item: Any) -> Optional[NormalizedInventoryNode]:
     uplink_id = None
     if isinstance(uplink, dict):
         uplink_id = _clean(uplink.get("deviceId"))
+    uplink_id = uplink_id or _clean(item.get("uplinkDeviceId"))
+    uplink_port = None
+    if isinstance(uplink, dict):
+        uplink_port = _clean(uplink.get("portIdx"))
+    uplink_port = uplink_port or _clean(item.get("uplinkPortIdx"))
+    features = item.get("features") if isinstance(item.get("features"), dict) else {}
+    kind = _clean(item.get("type")) or ""
+    if features.get("switching") or kind.lower() in {"switch", "usw"}:
+        category = "unifi_switch"
+    elif features.get("accessPoint") or kind.lower() in {"ap", "uap"}:
+        category = "unifi_ap"
+    elif kind.lower() in {"gateway", "ugw", "udm"}:
+        category = "unifi_gateway"
+    else:
+        category = "unifi_device"
+    serial = _clean(item.get("serialNumber") or item.get("serial"))
     return NormalizedInventoryNode(
         source_id=source_id,
         name=name,
         mac=mac,
         ip_address=_safe_ip(item.get("ipAddress") or item.get("ip")),
         model=_clean(item.get("model")),
-        category=_clean(item.get("type")),
+        category=category,
         state=_clean(item.get("state")),
         firmware=_clean(item.get("firmwareVersion")),
         uplink_source_id=uplink_id,
         source="unifi_inventory",
+        serial=serial,
+        identifiers={key: value for key, value in {"source_id": source_id, "serial": serial}.items() if value},
+        uplink_port_idx=uplink_port,
     )
 
 
@@ -87,7 +106,7 @@ def parse_device_interfaces(item: Any) -> list[NormalizedInterface]:
         idx = port.get("idx")
         if idx is None:
             continue
-        name = f"port-{idx}"
+        name = _clean(port.get("name")) or f"port-{idx}"
         connector = _clean(port.get("connector"))
         state = _clean(port.get("state"))
         results.append(
@@ -97,6 +116,14 @@ def parse_device_interfaces(item: Any) -> list[NormalizedInterface]:
                 oper_status=state,
                 source="unifi_interface",
                 owner_source_id=_clean(item.get("id")),
+                description=_clean(port.get("description")),
+                mac=_safe_mac(port.get("macAddress") or port.get("mac")),
+                identifiers={"port_idx": str(idx)},
+                evidence={
+                    key: port.get(key)
+                    for key in ("connector", "idx", "maxSpeedMbps", "poe", "speedMbps", "state")
+                    if port.get(key) is not None
+                },
             )
         )
     return results
@@ -109,6 +136,7 @@ def topology_from_inventory(node: NormalizedInventoryNode) -> Optional[Normalize
         local_mac=node.mac,
         local_source_id=node.source_id,
         remote_source_id=node.uplink_source_id,
+        remote_interface=f"port-{node.uplink_port_idx}" if node.uplink_port_idx else None,
         remote_identity=None,
         protocol="unifi_uplink",
         source="unifi_uplink",

@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -112,8 +113,85 @@ class Interface(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(64), default="unknown")
+    source_identifiers: Mapped[dict] = mapped_column(JSON, default=dict)
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
 
     device: Mapped[Device] = relationship(back_populates="interfaces")
+    observations: Mapped[list[InterfaceObservation]] = relationship(back_populates="interface")
+
+
+class InterfaceObservation(Base):
+    __tablename__ = "interface_observations"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    interface_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("interfaces.id"), nullable=False, index=True)
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"), nullable=False, index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    if_type: Mapped[Optional[str]] = mapped_column(String(64))
+    admin_status: Mapped[Optional[str]] = mapped_column(String(32))
+    oper_status: Mapped[Optional[str]] = mapped_column(String(32))
+    mac: Mapped[Optional[str]] = mapped_column(String(17))
+    source_identifiers: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    interface: Mapped[Interface] = relationship(back_populates="observations")
+
+
+class DeviceIdentifier(Base):
+    __tablename__ = "device_identifiers"
+    __table_args__ = (Index("ix_device_identifier_lookup", "tenant_id", "kind", "value"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class PhysicalLink(Base):
+    __tablename__ = "physical_links"
+    __table_args__ = (UniqueConstraint("tenant_id", "device_a_id", "device_b_id", name="uq_physical_link_pair"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    device_a_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"), nullable=False, index=True)
+    device_b_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id"), nullable=False, index=True)
+    interface_a_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("interfaces.id"))
+    interface_b_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("interfaces.id"))
+    directly_observed: Mapped[bool] = mapped_column(Boolean, default=True)
+    inferred: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    source: Mapped[Optional[str]] = mapped_column(String(64))
+    protocol: Mapped[Optional[str]] = mapped_column(String(32))
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class LinkEvidence(Base):
+    __tablename__ = "link_evidence"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    physical_link_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("physical_links.id"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    protocol: Mapped[Optional[str]] = mapped_column(String(32))
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    collection_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("collection_runs.id"))
+    directly_observed: Mapped[bool] = mapped_column(Boolean, default=True)
+    inferred: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Vlan(Base):

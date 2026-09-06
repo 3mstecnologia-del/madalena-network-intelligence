@@ -12,7 +12,17 @@ from app.core.ip import normalize_ip
 from app.core.mac import normalize_mac
 from app.correlation.engine import CorrelationEngine, MacCorrelation
 from app.correlation.topology import TopologyCorrelator
-from app.models.entities import CollectionRun, Device, IpAddress, MacAddress, Tenant
+from app.models.entities import (
+    CollectionRun,
+    Device,
+    Interface,
+    InterfaceObservation,
+    PhysicalLink,
+    LinkEvidence,
+    IpAddress,
+    MacAddress,
+    Tenant,
+)
 
 
 def _utcnow() -> datetime:
@@ -114,6 +124,141 @@ class QueryService:
             "macs": [c.to_dict() for c in correlated if c],
             "conflicts": conflicts,
         }
+
+    def list_interfaces(
+        self,
+        tenant_slug: str,
+        *,
+        device_id: UUID | None = None,
+        include_history: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        tenant = self.require_tenant(tenant_slug)
+        q = select(Interface).where(Interface.tenant_id == tenant.id)
+        if device_id is not None:
+            q = q.where(Interface.device_id == device_id)
+        rows = list(self.db.scalars(q.order_by(Interface.device_id, Interface.name).offset(offset).limit(limit)))
+        total = self.db.scalar(
+            select(func.count()).select_from(Interface).where(
+                Interface.tenant_id == tenant.id,
+                *( [Interface.device_id == device_id] if device_id is not None else [] ),
+            )
+        ) or 0
+        items = []
+        for iface in rows:
+            history_rows = list(
+                self.db.scalars(
+                    select(InterfaceObservation).where(
+                        InterfaceObservation.tenant_id == tenant.id,
+                        InterfaceObservation.interface_id == iface.id,
+                    ).order_by(InterfaceObservation.observed_at.desc())
+                )
+            )
+            items.append(
+                {
+                    "id": str(iface.id),
+                    "tenant_id": str(iface.tenant_id),
+                    "device_id": str(iface.device_id),
+                    "name": iface.name,
+                    "if_type": iface.if_type,
+                    "admin_status": iface.admin_status,
+                    "oper_status": iface.oper_status,
+                    "mac": iface.mac,
+                    "description": iface.description,
+                    "source": iface.source,
+                    "source_identifiers": iface.source_identifiers or {},
+                    "first_seen": iface.first_seen.isoformat() if iface.first_seen else None,
+                    "last_seen": iface.last_seen.isoformat() if iface.last_seen else None,
+                    "observed_at": iface.observed_at.isoformat() if iface.observed_at else None,
+                    "device": {
+                        "id": str(iface.device.id) if iface.device else None,
+                        "name": iface.device.name if iface.device else None,
+                        "device_type": iface.device.device_type if iface.device else None,
+                    },
+                    "history": [
+                        {
+                            "id": str(h.id),
+                            "observed_at": h.observed_at.isoformat() if h.observed_at else None,
+                            "source": h.source,
+                            "name": h.name,
+                            "description": h.description,
+                            "if_type": h.if_type,
+                            "admin_status": h.admin_status,
+                            "oper_status": h.oper_status,
+                            "mac": h.mac,
+                            "source_identifiers": h.source_identifiers or {},
+                            "evidence": h.evidence or {},
+                            "collection_run_id": str(h.collection_run_id) if h.collection_run_id else None,
+                        }
+                        for h in history_rows
+                    ] if include_history else [],
+                }
+            )
+        return {"tenant": tenant.slug, "total": int(total), "items": items, "limit": limit, "offset": offset}
+
+    def list_physical_links(
+        self,
+        tenant_slug: str,
+        *,
+        device_id: UUID | None = None,
+        include_history: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        tenant = self.require_tenant(tenant_slug)
+        q = select(PhysicalLink).where(PhysicalLink.tenant_id == tenant.id)
+        if device_id is not None:
+            q = q.where((PhysicalLink.device_a_id == device_id) | (PhysicalLink.device_b_id == device_id))
+        rows = list(self.db.scalars(q.order_by(PhysicalLink.last_seen.desc()).offset(offset).limit(limit)))
+        total = self.db.scalar(
+            select(func.count()).select_from(PhysicalLink).where(
+                PhysicalLink.tenant_id == tenant.id,
+                *([
+                    (PhysicalLink.device_a_id == device_id) | (PhysicalLink.device_b_id == device_id)
+                ] if device_id is not None else []),
+            )
+        ) or 0
+        items = []
+        for link in rows:
+            evidences = list(
+                self.db.scalars(
+                    select(LinkEvidence).where(LinkEvidence.physical_link_id == link.id).order_by(LinkEvidence.observed_at.desc())
+                )
+            )
+            da = self.db.get(Device, link.device_a_id)
+            db = self.db.get(Device, link.device_b_id)
+            ia = self.db.get(Interface, link.interface_a_id) if link.interface_a_id else None
+            ib = self.db.get(Interface, link.interface_b_id) if link.interface_b_id else None
+            items.append(
+                {
+                    "id": str(link.id),
+                    "device_a": {"id": str(da.id) if da else None, "name": da.name if da else None, "device_type": da.device_type if da else None},
+                    "device_b": {"id": str(db.id) if db else None, "name": db.name if db else None, "device_type": db.device_type if db else None},
+                    "interface_a": {"id": str(ia.id) if ia else None, "name": ia.name if ia else None, "description": ia.description if ia else None},
+                    "interface_b": {"id": str(ib.id) if ib else None, "name": ib.name if ib else None, "description": ib.description if ib else None},
+                    "directly_observed": link.directly_observed,
+                    "inferred": link.inferred,
+                    "confidence": link.confidence,
+                    "first_seen": link.first_seen.isoformat() if link.first_seen else None,
+                    "last_seen": link.last_seen.isoformat() if link.last_seen else None,
+                    "sources": sorted({e.source for e in evidences}),
+                    "evidence": [
+                        {
+                            "source": e.source,
+                            "protocol": e.protocol,
+                            "observed_at": e.observed_at.isoformat() if e.observed_at else None,
+                            "directly_observed": e.directly_observed,
+                            "inferred": e.inferred,
+                            "confidence": e.confidence,
+                            "collection_run_id": str(e.collection_run_id) if e.collection_run_id else None,
+                            "evidence": e.evidence or {},
+                        }
+                        for e in evidences
+                    ] if include_history or True else [],
+                }
+            )
+        return {"tenant": tenant.slug, "total": int(total), "items": items, "limit": limit, "offset": offset}
 
     def collection_runs(
         self, tenant_slug: str, limit: int = 50, offset: int = 0

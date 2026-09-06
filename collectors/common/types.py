@@ -85,6 +85,11 @@ class NormalizedInterface:
     observed_at: datetime = field(default_factory=utcnow)
     source: str = "mikrotik_interface"
     owner_source_id: Optional[str] = None
+    description: Optional[str] = None
+    identifiers: dict[str, str] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    directly_observed: bool = True
+    confidence: Optional[float] = 1.0
 
 
 @dataclass
@@ -99,6 +104,7 @@ class NormalizedNeighbor:
     protocol: Optional[str] = None
     observed_at: datetime = field(default_factory=utcnow)
     source: str = "mikrotik_neighbor"
+    chassis_id: Optional[str] = None
 
 
 @dataclass
@@ -116,6 +122,11 @@ class NormalizedTopologyLink:
     protocol: Optional[str] = None
     observed_at: datetime = field(default_factory=utcnow)
     source: str = "mikrotik_neighbor"
+    remote_chassis_id: Optional[str] = None
+    remote_identifiers: dict[str, str] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    directly_observed: bool = True
+    confidence: float = 1.0
 
 
 @dataclass
@@ -133,6 +144,9 @@ class NormalizedInventoryNode:
     uplink_source_id: Optional[str] = None
     observed_at: datetime = field(default_factory=utcnow)
     source: str = "unifi_inventory"
+    serial: Optional[str] = None
+    identifiers: dict[str, str] = field(default_factory=dict)
+    uplink_port_idx: Optional[str] = None
 
 
 @dataclass
