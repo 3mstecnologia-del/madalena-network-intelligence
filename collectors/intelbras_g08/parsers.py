@@ -51,11 +51,14 @@ _MAC_ROW = re.compile(
 
 _ONT_BRIEF = re.compile(
     r"(?P<ont>\d+/\d+/\d+)\s+"
-    r"(?P<serial>[A-Za-z0-9]+)\s+"
-    r"(?P<status>online|offline|los|dying-gasp|\S+)\s*"
-    r"(?P<profile>\S+)?",
+    r"(?P<serial>[A-Za-z0-9-]+)\s+"
+    r"(?P<device_type>\S+)\s+"
+    r"(?P<uptime>\S+)\s+"
+    r"(?P<status>online|offline|testing|los|dying-gasp|othere_rror|\.\.\.)",
     re.IGNORECASE,
 )
+# Real G08 brief row: "0/1/1  TEST-ONU01  140PoE  125d16h39m  online  working"
+# Columns: ONT  SN  Device-type  Up/Down-time  Status  W/S
 
 
 def parse_ont_mac_address(
@@ -177,13 +180,16 @@ def _parse_mac_line(line: str, *, command: str, source: str) -> Optional[Normali
 
 
 def parse_ont_brief(text: str) -> list[NormalizedOnu]:
-    """Parse output of: show ont brief interface gpon all"""
+    """Parse output of: show ont brief interface gpon all.
+
+    Real G08 column order: ONT  SN  Device-type  Up/Down-time  Status  W/S.
+    """
     results: list[NormalizedOnu] = []
     for line in text.splitlines():
         line = line.strip()
-        if not line or line.startswith("#") or "ONT" in line.upper() and "SERIAL" in line.upper():
+        if not line or line.startswith("#") or "ONT" in line.upper() and "STATUS" in line.upper():
             continue
-        m = _ONT_BRIEF.search(line)
+        m = _ONT_BRIEF.match(line)
         if not m:
             continue
         ont = m.group("ont")
@@ -195,7 +201,7 @@ def parse_ont_brief(text: str) -> list[NormalizedOnu]:
                 pon=pon,
                 serial=m.group("serial"),
                 status=m.group("status").lower() if m.group("status") else None,
-                profile_name=_opt(m.group("profile")),
+                profile_name=_opt(m.group("device_type")),
             )
         )
     return results

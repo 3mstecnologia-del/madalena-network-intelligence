@@ -285,6 +285,7 @@ def test_g08_driver_collects_enabled_mac_and_brief_commands():
     assert {(onu.ont_id, onu.status, onu.profile_name) for onu in result.onus} == {
         ("0/1/14", "online", "CORPORATIVO"),
         ("0/1/15", "offline", "HOME"),
+        ("0/2/3", "online", "R1v2"),
     }
 
 
@@ -298,7 +299,7 @@ def test_g08_driver_collects_brief_only_when_enabled():
     assert transport.calls == [G08_ONT_BRIEF_COMMAND]
     assert result.meta["status"] == "ok"
     assert result.meta["completeness"] == "complete"
-    assert len(result.onus) == 2
+    assert len(result.onus) == 3
     assert result.olt_macs == []
 
 

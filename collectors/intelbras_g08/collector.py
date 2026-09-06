@@ -19,6 +19,7 @@ from collectors.common.transport import (
     Transport,
     TransportError,
 )
+from collectors.common.transport_openssh_interactive import OpenSshInteractiveTransport
 from collectors.common.types import CollectorResult
 from collectors.intelbras_g08.parsers import (
     onus_from_macs,
@@ -164,7 +165,7 @@ class IntelbrasG08Collector:
                     "command": G08_MAC_TABLE_COMMAND,
                 }
             )
-        transport = InteractiveCliTransport(secrets, timeout_sec=180)
+        transport = OpenSshInteractiveTransport(secrets, timeout_sec=180)
         return self.collect_via_transport(transport, enabled_collectors=enabled_collectors)
 
     def _failed(self, error: str, command: str) -> CollectorResult:

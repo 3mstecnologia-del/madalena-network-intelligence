@@ -72,8 +72,37 @@ Total entries: 2
 def test_parse_ont_brief():
     text = (FIX / "g08_ont_brief.txt").read_text()
     rows = parse_ont_brief(text)
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert rows[0].ont_id == "0/1/14"
     assert rows[0].serial == "ALCL12345678"
     assert rows[0].status == "online"
     assert rows[0].profile_name == "CORPORATIVO"
+    assert rows[1].status == "offline"
+    assert rows[1].profile_name == "HOME"
+    assert rows[2].profile_name == "R1v2"
+
+
+def test_parse_ont_brief_real_g08_layout():
+    rows = parse_ont_brief(
+        "ONT     SN             Device-type  Up/Down-time  Status   W/S\n"
+        "0/1/1   TEST-111111     140PoE       125d16h39m    online   working\n"
+        "0/1/9   TEST-222222  -            109d22h27m    online   working\n"
+        "0/1/12  TEST-333333      140PoE       142d18h4m     offline  working\n"
+    )
+    assert len(rows) == 3
+    assert rows[0].ont_id == "0/1/1"
+    assert rows[0].serial == "TEST-111111"
+    assert rows[0].status == "online"
+    assert rows[0].profile_name == "140PoE"
+    assert rows[2].status == "offline"
+
+
+def test_parse_ont_brief_avoids_overmatching_device_type_as_status():
+    rows = parse_ont_brief(
+        "0/2/3  TEST-444444  R1v2  165d20h19m  online  working\n"
+        "0/1/8  TEST-555555  -     9d19h43m    offline  working\n"
+    )
+    assert rows[0].status == "online"
+    assert rows[0].profile_name == "R1v2"
+    assert rows[1].status == "offline"
+    assert rows[1].profile_name is None
