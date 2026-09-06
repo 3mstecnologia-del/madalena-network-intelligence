@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,12 +20,22 @@ from app.core.db import get_db
 from app.core.ip import normalize_ip
 from app.core.mac import normalize_mac
 from app.services.query import QueryService
+from app.services.graph import GraphService
 
 app = FastAPI(
     title="Madalena Network Intelligence",
     version="0.4.0",
     description="Multi-tenant network inventory, topology, and MAC/IP/ONU correlation API",
 )
+
+# Graph UI (Obsidian-like view of the persisted infrastructure graph).
+UI_DIR: Path = Path(__file__).resolve().parents[2] / "app" / "ui"
+app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+def index() -> dict:
+    return {"service": "madalena-network-intelligence", "ui": "/ui/"}
 
 
 @app.get("/health", response_model=HealthOut)
@@ -123,6 +135,24 @@ def get_topology(
         return QueryService(db).get_topology(
             tenant, include_history=include_history, limit=limit, offset=offset
         )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/topology/graph")
+def get_topology_graph(
+    tenant: str = Query(...),
+    include_connected: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Evidence-backed infrastructure graph (nodes + typed relations).
+
+    Node types: site, device, pon, onu. Relations never hardcoded in any
+    client: the frontend renders whatever supported evidence exists. Endpoint
+    machines (DHCP/ARP/FDB) are not materialized as graph nodes.
+    """
+    try:
+        return GraphService(db).build(tenant, include_connected=include_connected)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

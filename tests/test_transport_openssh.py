@@ -24,7 +24,7 @@ def secrets() -> DeviceSecrets:
 def _fake_run_success(**kw):
     return subprocess.CompletedProcess(
         kw.get("args", []), 0,
-        stdout=" 0   address=1.2.3.4 mac-address=AA:BB:CC:DD:EE:FF\n",
+        stdout=" 0   address=192.0.2.4 mac-address=AA:BB:CC:DD:EE:FF\n",
         stderr="",
     )
 

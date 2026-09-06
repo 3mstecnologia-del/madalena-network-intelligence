@@ -48,17 +48,17 @@ def test_g08_strip_cli_preserves_row_joined_to_pager_prompt():
     command = "show ont mac-address-table interface gpon all"
     text = (
         f"{command}\n"
-        "AA-BB-CC-DD-EE-FF 30 0/1/14 ALCL12345678 1/128"
+        "AA-BB-CC-DD-EE-FF 30 0/1/14 TEST-12345678 1/128"
         "press ENTER to next line, CTRL+C to stop\n"
-        "11-22-33-44-55-66 40 0/1/15 ALCL87654321 1/129\n"
+        "11-22-33-44-55-66 40 0/1/15 TEST-87654321 1/129\n"
         "G8>\n"
     )
 
     cleaned = transport._strip_cli(text, command)
 
     assert cleaned.splitlines() == [
-        "AA-BB-CC-DD-EE-FF 30 0/1/14 ALCL12345678 1/128",
-        "11-22-33-44-55-66 40 0/1/15 ALCL87654321 1/129",
+        "AA-BB-CC-DD-EE-FF 30 0/1/14 TEST-12345678 1/128",
+        "11-22-33-44-55-66 40 0/1/15 TEST-87654321 1/129",
     ]
     assert "press ENTER" not in cleaned
     assert "CTRL+C" not in cleaned

@@ -151,12 +151,12 @@ def test_sanitized_exception_message_used_before_persist():
         pass
 
     msg = sanitized_exception_message(
-        Boom("login failed password=hunter2 host=192.0.2.9 user='admin' ITBS-aabbccddee")
+        Boom("login failed password=hunter2 host=192.0.2.9 user='admin' TEST-aabbccddee")
     )
     assert "hunter2" not in msg
     assert "192.0.2.9" not in msg
     assert "admin" not in msg
-    assert "ITBS-aabbccddee" not in msg
+    assert "TEST-aabbccddee" not in msg
     assert "<IP>" in msg or "<REDACTED>" in msg
 
 
@@ -182,10 +182,10 @@ def test_collect_live_honors_ssh_port_no_fallback(monkeypatch):
 
 
 def test_sanitize_error_strips_quoted_user_and_serial():
-    text = sanitize_error("failed for user 'madalena' to 'core.example' SN=FHTT-c139d28f")
+    text = sanitize_error("failed for user 'madalena' to 'core.example' SN=TEST-c139d28f")
     assert "madalena" not in text
     assert "core.example" not in text
-    assert "FHTT-c139d28f" not in text
+    assert "TEST-c139d28f" not in text
 
 
 def test_known_hosts_loaded_with_reject_policy(tmp_path, monkeypatch):

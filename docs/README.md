@@ -15,6 +15,7 @@ Canonical docs for humans and agents. Prefer updating these over creating parall
 | Local Docker operations | [operations/local-development.md](operations/local-development.md) |
 | Madalena VPS deploy | [operations/madalena-deployment.md](operations/madalena-deployment.md) |
 | Topology live validation (operacional) | [operations/topology-live-validation.md](operations/topology-live-validation.md) |
+| Infrastructure graph UI (evidence-backed) | [operations/graph-ui.md](operations/graph-ui.md) |
 | Architectural decisions | [decisions/](decisions/) |
 | Security notes | [security.md](security.md) |
 

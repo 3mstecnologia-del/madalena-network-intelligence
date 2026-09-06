@@ -10,3 +10,4 @@ Format: **Context**, **Decision**, **Consequences**, **Status** (`proposed` / `a
 | [0002](0002-tenant-isolation.md) | Tenant is the security boundary on every query path | accepted |
 | [0003](0003-pre-persistence-exclusion.md) | Drop out-of-scope evidence before persisting endpoints | accepted |
 | [0004](0004-readonly-allowlist-transport.md) | Collectors use configured read-only transports and allowlists | accepted |
+| [0005](0005-evidence-backed-graph.md) | Infrastructure graph derived from persisted evidence, never hardcoded | accepted |

@@ -37,17 +37,17 @@ def test_parse_ont_mac_vid_table():
     assert rows[0].ont_id == "0/1/14"
     assert rows[0].pon == "0/1"
     assert rows[0].vlan_id == 30
-    assert rows[0].serial == "ALCL12345678"
+    assert rows[0].serial == "TEST-12345678"
     assert rows[0].gem == "1/128"
     onus = onus_from_macs(rows)
-    assert {u.ont_id: u.serial for u in onus}["0/1/14"] == "ALCL12345678"
+    assert {u.ont_id: u.serial for u in onus}["0/1/14"] == "TEST-12345678"
 
 
 def test_parse_ont_mac_table_preserves_distinct_services_on_same_ont():
     text = """\
 MAC-Address         VID  ONT-ID  SN            ID/GEM
-AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
-AA-BB-CC-DD-EE-FF  40   0/1/14  ALCL12345678  2/129
+AA-BB-CC-DD-EE-FF  30   0/1/14  TEST-12345678  1/128
+AA-BB-CC-DD-EE-FF  40   0/1/14  TEST-12345678  2/129
 Total entries: 2
 """
 
@@ -59,8 +59,8 @@ Total entries: 2
 def test_parse_ont_mac_table_deduplicates_serial_variant_of_same_service():
     text = """\
 MAC-Address         VID  ONT-ID  SN            ID/GEM
-AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL12345678  1/128
-AA-BB-CC-DD-EE-FF  30   0/1/14  ALCL87654321  1/128
+AA-BB-CC-DD-EE-FF  30   0/1/14  TEST-12345678  1/128
+AA-BB-CC-DD-EE-FF  30   0/1/14  TEST-87654321  1/128
 Total entries: 2
 """
 
@@ -74,7 +74,7 @@ def test_parse_ont_brief():
     rows = parse_ont_brief(text)
     assert len(rows) == 3
     assert rows[0].ont_id == "0/1/14"
-    assert rows[0].serial == "ALCL12345678"
+    assert rows[0].serial == "TEST-12345678"
     assert rows[0].status == "online"
     assert rows[0].profile_name == "CORPORATIVO"
     assert rows[1].status == "offline"
