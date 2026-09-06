@@ -25,8 +25,8 @@ from collectors.mikrotik.parsers import parse_interfaces, parse_neighbors
 from collectors.unifi.collector import UnifiNetworkCollector
 from tests.conftest import seed_two_tenants
 
-MAC_MK = "02:00:5E:10:00:01"
-MAC_SW = "02:00:5E:10:00:02"
+MAC_MK = "AA:BB:CC:10:00:01"
+MAC_SW = "AA:BB:CC:10:00:02"
 SW_ID = "TEST-SW-001"
 
 
@@ -79,11 +79,11 @@ def test_interface_observation_preserves_temporal_evidence(db: Session):
 
 def test_mikrotik_description_chassis_protocol_and_topology_collection():
     interfaces = parse_interfaces(
-        '0 name=ether1 type=ether comment="TEST-uplink" default-name=ether1 mac-address=02:00:5E:10:00:01\n'
+        '0 name=ether1 type=ether comment="TEST-uplink" default-name=ether1 mac-address=AA:BB:CC:10:00:01\n'
     )
     neighbors = parse_neighbors(
         "0 interface=ether1 interface-name=port-24 identity=TEST-SW "
-        "chassis-id=02:00:5E:10:00:02 discoverer=lldp\n"
+        "chassis-id=AA:BB:CC:10:00:02 discoverer=lldp\n"
     )
     assert interfaces[0].description == "TEST-uplink"
     assert interfaces[0].identifiers["default_name"] == "ether1"
@@ -91,10 +91,10 @@ def test_mikrotik_description_chassis_protocol_and_topology_collection():
     assert neighbors[0].protocol == "lldp"
     result = MikroTikCollector("env", "TEST").collect_from_texts(
         identity_text="name: TEST-MK",
-        interfaces_text='0 name=ether1 type=ether comment="TEST-uplink" mac-address=02:00:5E:10:00:01',
+        interfaces_text='0 name=ether1 type=ether comment="TEST-uplink" mac-address=AA:BB:CC:10:00:01',
         neighbors_text=(
             "0 interface=ether1 interface-name=port-24 identity=TEST-SW "
-            "chassis-id=02:00:5E:10:00:02 discoverer=lldp"
+            "chassis-id=AA:BB:CC:10:00:02 discoverer=lldp"
         ),
     )
     assert result.identity is not None

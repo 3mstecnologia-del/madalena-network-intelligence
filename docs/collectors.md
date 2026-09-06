@@ -22,8 +22,13 @@ Sources: identity, resource, interfaces, ARP, DHCP leases, bridge/FDB, IP neighb
 
 | Mode | Commands |
 |------|----------|
-| light | identity, ARP, DHCP, FDB, neighbors |
-| full | light + resource, interfaces |
+| light | identity, **interfaces**, ARP, DHCP, FDB, neighbors |
+| full | light + resource |
+
+`interfaces` runs on the light set so interface/port discovery (name, description,
+type, MAC, source identifiers) happens on every collection, feeding `Interface`
+and `InterfaceObservation` for physical topology. Read-only: MikroTik collection
+never issues `add` / `set` / `remove` / `enable` / `disable` / `move`.
 
 Live: `MikroTikCollector.collect_live` uses **only** the configured protocol (`{PREFIX}_PROTOCOL`) on `{PREFIX}_PORT` / `{PREFIX}_SSH_PORT`. SSH does not fall back to Telnet or API. Without `{PREFIX}_HOST` / `_USERNAME` / `_PASSWORD` the run is `skipped`. Per-device `collectors_enabled` selects which command groups run (a fleet member may omit `dhcp`).
 
