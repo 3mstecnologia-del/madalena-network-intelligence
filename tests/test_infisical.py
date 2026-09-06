@@ -16,12 +16,12 @@ class _Handler(BaseHTTPRequestHandler):
     """Fake Infisical server: universal-auth login + project + folders + secrets."""
 
     store: dict[str, str] = {
-        "OLT_UNIPLAC_HOST": "10.31.0.2",
+        "OLT_UNIPLAC_HOST": "192.0.2.200",
         "OLT_UNIPLAC_USERNAME": "olt_admin",
         "OLT_UNIPLAC_PASSWORD": "sup3rs3cret",
         "OLT_UNIPLAC_PORT": "22",
         "OLT_UNIPLAC_PROTOCOL": "ssh",
-        "MK_UNIPLAC_HOST": "10.254.0.11",
+        "MK_UNIPLAC_HOST": "192.0.2.202",
         "MK_UNIPLAC_USERNAME": "mk_admin",
         "MK_UNIPLAC_PASSWORD": "mk_s3cr3t",
         "MK_UNIPLAC_PORT": "22",
@@ -107,14 +107,14 @@ def test_fetch_all_enumerates_folders(fake_server):
     assert "OLT_UNIPLAC_HOST" in values
     assert "OLT_UNIPLAC_PASSWORD" in values
     assert "MK_UNIPLAC_HOST" in values
-    assert values["OLT_UNIPLAC_HOST"] == "10.31.0.2"
+    assert values["OLT_UNIPLAC_HOST"] == "192.0.2.200"
 
 
 def test_resolve_secrets_infisical(monkeypatch, fake_server):
     monkeypatch.setattr(infisical, "InfisicalClient", lambda **kw: fake_server)
     secrets = resolve_secrets("infisical", "OLT_UNIPLAC")
     assert secrets is not None
-    assert secrets.host == "10.31.0.2"
+    assert secrets.host == "192.0.2.200"
     assert secrets.username == "olt_admin"
     assert secrets.password == "sup3rs3cret"
     assert secrets.port == 22
@@ -139,4 +139,20 @@ def test_resolve_secrets_infisical_uses_ip_alias(monkeypatch, fake_server):
     # OLT-style reference uses _IP instead of _HOST for the address.
     monkeypatch.setenv("OLT_UNIPLAC_HOST", "")  # not used; fake has HOST anyway
     resolved = resolve_secrets("infisical", "OLT_UNIPLAC")
-    assert resolved.host == "10.31.0.2"
+    assert resolved.host == "192.0.2.200"
+
+
+def test_resolve_secrets_canonical_olt_user_and_ip(monkeypatch, fake_server):
+    """Canonical UNIPLAC OLT pattern uses OLT_UNIPLAC_IP + OLT_UNIPLAC_USER."""
+    # Supply the canonical OLT variant keys directly (IP + USER, no HOST/USERNAME).
+    monkeypatch.delenv("OLT_UNIPLAC_HOST", raising=False)
+    monkeypatch.delenv("OLT_UNIPLAC_USERNAME", raising=False)
+    monkeypatch.setenv("OLT_UNIPLAC_IP", "192.0.2.201")
+    monkeypatch.setenv("OLT_UNIPLAC_USER", "g08op")
+    monkeypatch.setenv("OLT_UNIPLAC_PASSWORD", "sec")
+    monkeypatch.setattr(infisical, "InfisicalClient", lambda **kw: fake_server)
+    resolved = resolve_secrets("env", "OLT_UNIPLAC")
+    assert resolved is not None
+    assert resolved.host == "192.0.2.201"
+    assert resolved.username == "g08op"
+    assert resolved.protocol == "ssh"

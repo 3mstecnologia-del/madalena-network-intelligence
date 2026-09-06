@@ -85,7 +85,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
         return _field(secret_prefix, suffix, secret_map, os.getenv)
 
     host = get("HOST") or get("IP")
-    user = get("USERNAME")
+    user = get("USERNAME") or get("USER")
     password = get("PASSWORD")
     port_raw = get("SSH_PORT") or get("PORT") or "22"
     protocol = (get("PROTOCOL") or "").strip().lower()

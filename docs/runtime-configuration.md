@@ -11,8 +11,8 @@ At process start, `resolve_secrets(provider, prefix)` resolves device credential
 
 - **`env`** — reads injected runtime variables:
   ```
-  {PREFIX}_HOST        # (alias {PREFIX}_IP for OLT-style references)
-  {PREFIX}_USERNAME
+  {PREFIX}_HOST        # (alias {PREFIX}_IP, {PREFIX}_USER for the canonical
+  {PREFIX}_USERNAME    #  UNIPLAC OLT pattern: OLT_UNIPLAC_IP + OLT_UNIPLAC_USER)
   {PREFIX}_PASSWORD
   {PREFIX}_SSH_PORT    # optional, default 22 (alias {PREFIX}_PORT)
   {PREFIX}_PROTOCOL    # ssh | telnet | https
@@ -21,10 +21,21 @@ At process start, `resolve_secrets(provider, prefix)` resolves device credential
   `{PREFIX}_*` keys directly from the Cofre Central at runtime, so device
   credentials only live in Infisical. The scheduler mounts an Infisical machine
   identity via `INFISICAL_URL`, `INFISICAL_CLIENT_ID`,
-  `INFISICAL_CLIENT_SECRET`, `INFISICAL_PROJECT_ID`, `INFISICAL_ENV`
-  (default `production`). Device secrets may live under any folder; the client
-  enumerates folders recursively. Environment variables still override Cofre
-  values when both are set.
+  `INFISICAL_CLIENT_SECRET`, `INFISICAL_PROJECT_ID`, `INFISICAL_ENV`.
+  Device secrets may live under any folder; the client enumerates folders
+  recursively. Environment variables still override Cofre values when both set.
+
+**Canonical Cofre references (project `UNIPLAC`, env `development`, folder
+`/legacy`)**:
+
+| Prefix | Keys (consumed by {PREFIX}_) | Device |
+|--------|------------------------------|--------|
+| `OLT_UNIPLAC` | `OLT_UNIPLAC_IP`, `OLT_UNIPLAC_USER`, `OLT_UNIPLAC_PASSWORD` (ssh/22) | Intelbras G08 |
+| `MIKROTIK_UNIPLAC_MK200` | `MIKROTIK_UNIPLAC_MK200_HOST`, `..._USERNAME`, `..._PASSWORD`, `..._SSH_PORT` (SSH on a non-default port) | UNI-MK200 |
+
+The Cofre access requires the Infisical machine identity that owns the UNIPLAC
+project (`MADALENA_COFRE_INFRA02_*`). Reuse these canonical references — do not
+create parallel `OLT_UNIPLAC_*` / `MK_UNIPLAC_*` that would duplicate them.
 
 Missing keys → collection `skipped: secrets_unavailable`, never a crash.
 
