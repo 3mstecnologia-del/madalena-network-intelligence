@@ -89,6 +89,10 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
     password = get("PASSWORD")
     port_raw = get("SSH_PORT") or get("PORT") or "22"
     protocol = (get("PROTOCOL") or "").strip().lower()
+    # Optional management-path override: when the secret HOST is the public/inet
+    # endpoint but the management path is over a private overlay, set
+    # {PREFIX}_OVERLAY_HOST to the in-band address to connect to.
+    overlay_host = (get("OVERLAY_HOST") or "").strip() or None
     api_key = get("API_KEY") or None
     base_url = (get("BASE_URL") or "").rstrip("/") or None
     site = get("SITE") or None
@@ -127,7 +131,7 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
     if not host or not user or not password:
         return None
     return DeviceSecrets(
-        host=host,
+        host=overlay_host or host,
         username=user,
         password=password,
         port=port,

@@ -34,7 +34,6 @@ from collectors.mikrotik.readonly import (
     MIKROTIK_READ_ALLOWLIST,
     MIKROTIK_STEP_COLLECTOR,
 )
-from collectors.mikrotik.transport_ssh import SshTransport
 
 
 class MikroTikCollector:
@@ -197,7 +196,11 @@ class MikroTikCollector:
             )
         proto = (secrets.protocol or "ssh").lower()
         if proto in {"ssh", "ssh2"}:
-            transport = SshTransport(secrets, timeout_sec=60)
+            # OpenSSH CLI transport handles MikroTik RouterOS 7 servers whose
+            # banner paramiko cannot read ("Error reading SSH protocol banner").
+            from collectors.mikrotik.transport_openssh import OpenSshCliTransport
+
+            transport = OpenSshCliTransport(secrets, timeout_sec=90)
         elif proto in {"telnet", "telnet23"}:
             from collectors.common.cli_interactive import InteractiveCliTransport
 
@@ -222,7 +225,7 @@ class MikroTikCollector:
             dhcp_only=dhcp_only,
             enabled_collectors=enabled_collectors,
         )
-        if isinstance(transport, SshTransport):
+        if hasattr(transport, "last_diag"):
             result.meta["ssh_diag"] = {
                 k: v for k, v in transport.last_diag.items() if k != "host"
             }

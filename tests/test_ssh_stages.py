@@ -177,7 +177,7 @@ def test_collect_live_honors_ssh_port_no_fallback(monkeypatch):
 
     monkeypatch.setattr(MikroTikCollector, "collect_via_transport", fake_via)
     MikroTikCollector("env", "EX").collect_live(dhcp_only=True)
-    assert seen["type"] == "SshTransport"
+    assert seen["type"] == "OpenSshCliTransport"
     assert seen["port"] == 8822
 
 
