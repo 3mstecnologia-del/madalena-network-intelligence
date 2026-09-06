@@ -165,6 +165,26 @@ def list_physical_links(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/olt-locations")
+def list_olt_locations(
+    tenant: str = Query(...),
+    mac: str | None = Query(None, description="Filter by a specific MAC"),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Correlate OLT-learned MACs (behind ONUs) with known devices.
+
+    Reports which known APs/switches were observed behind which ONU/PON of which
+    OLT. This is location/path evidence — it does not imply a direct ONU<->device
+    cable when a bridge/switch could sit in between.
+    """
+    try:
+        return QueryService(db).olt_locations(tenant, mac=mac, limit=limit, offset=offset)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/topology")
 def get_topology(
     tenant: str = Query(...),

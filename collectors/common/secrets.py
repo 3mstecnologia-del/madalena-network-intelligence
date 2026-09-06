@@ -86,7 +86,11 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
 
     host = get("HOST") or get("IP")
     user = get("USERNAME") or get("USER")
-    password = get("PASSWORD")
+    # The Cofre stores many UNIPLAC RouterOS credentials under the explicit
+    # `{PREFIX}_MADALENA_PASSWORD` key name (the `madalena` service user), not
+    # `{PREFIX}_PASSWORD`. Honor that real layout as a fallback slot, otherwise
+    # those devices resolve `None -> skipped: secrets_unavailable`.
+    password = get("PASSWORD") or get("MADALENA_PASSWORD")
     port_raw = get("SSH_PORT") or get("PORT") or "22"
     protocol = (get("PROTOCOL") or "").strip().lower()
     # Optional management-path override: when the secret HOST is the public/inet
@@ -110,12 +114,18 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
     except ValueError:
         return None
 
-    if api_key and (base_url or host):
-        url = base_url or (f"https://{host}" if host else None)
+    # Effective connect address: OVERLAY_HOST (in-band management path) wins
+    # over the public HOST/IP. A device addressed ONLY via OVERLAY_HOST (no
+    # HOST in the Cofre) must still resolve — the existence check below keys on
+    # this effective host, not on `host` alone.
+    effective_host = overlay_host or host
+
+    if api_key and (base_url or effective_host):
+        url = base_url or (f"https://{effective_host}" if effective_host else None)
         if not url:
             return None
         return DeviceSecrets(
-            host=host,
+            host=effective_host,
             username=user,
             password=password,
             port=port,
@@ -128,10 +138,10 @@ def resolve_secrets(secret_provider: str, secret_prefix: str) -> Optional[Device
             tls_server_name=tls_server_name,
         )
 
-    if not host or not user or not password:
+    if not effective_host or not user or not password:
         return None
     return DeviceSecrets(
-        host=overlay_host or host,
+        host=effective_host,
         username=user,
         password=password,
         port=port,

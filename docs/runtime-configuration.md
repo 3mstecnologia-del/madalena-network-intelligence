@@ -32,6 +32,15 @@ At process start, `resolve_secrets(provider, prefix)` resolves device credential
 |--------|------------------------------|--------|
 | `OLT_UNIPLAC` | `OLT_UNIPLAC_IP`, `OLT_UNIPLAC_USER`, `OLT_UNIPLAC_PASSWORD` (ssh/22) | Intelbras G08 |
 | `MIKROTIK_UNIPLAC_MK200` | `MIKROTIK_UNIPLAC_MK200_HOST`, `..._USERNAME`, `..._PASSWORD`, `..._SSH_PORT` (SSH on a non-default port) | UNI-MK200 |
+| `MIKROTIK_UNIPLAC_MK_ISO` / `_MK_PON` / `_3MS_ROUTER` | overlay-only: `{PREFIX}_OVERLAY_HOST` + `{PREFIX}_USERNAME` + `{PREFIX}_PASSWORD` + `{PREFIX}_SSH_PORT` injected at runtime | edge routers (no public HOST in the Cofre) |
+
+The Cofre also stores many RouterOS credentials as `{PREFIX}_MADALENA_PASSWORD`
+(the `madalena`/`matheus` service users). `resolve_secrets` honors that layout:
+`{PREFIX}_PASSWORD` falls back to `{PREFIX}_MADALENA_PASSWORD`.
+
+A device addressed **only** via `{PREFIX}_OVERLAY_HOST` (no `HOST`/`IP` key in the
+Cofre) resolves correctly: the effective connect host is `OVERLAY_HOST`, and the
+existence check keys on it.
 
 The Cofre access requires the Infisical machine identity that owns the UNIPLAC
 project (`MADALENA_COFRE_INFRA02_*`). Reuse these canonical references — do not
@@ -68,6 +77,21 @@ SSH: `NI_SSH_KNOWN_HOSTS` (container path, default `/run/ssh/known_hosts`) plus 
 A router with no DHCP server omits `dhcp`. The product does not assume which fleet member serves leases.
 
 Optional `devices.collection_interval_sec` skips a device if its last finished run is newer than that interval.
+
+## Scheduler policy
+
+Automatic collection is **FULL runs only**, scheduled in
+`SCHEDULER_TIMEZONE` (default `America/Sao_Paulo`) at the comma-separated
+`SCHEDULER_FULL_CRON` times (default `07:00,12:00,18:00,23:59`). Each FULL run
+collects every enabled source (MikroTik fleet, G08 OLT, UniFi) and executes
+ingest + correlation. There are no automatic intermediate/light runs.
+
+- Manual full run: `python -m scheduler.main --once` (also what
+  `scheduler.main(args=["--once"])` triggers); inject per-device
+  `{PREFIX}_OVERLAY_HOST`/`_USERNAME`/`_PASSWORD`/`_SSH_PORT` at runtime for
+  overlay-only devices.
+- Invalid/out-of-range `HH:MM` tokens in `SCHEDULER_FULL_CRON` are skipped; an
+  empty spec idles the scheduler (heartbeat kept alive) instead of crashing it.
 
 ## Exclusion (before persist)
 

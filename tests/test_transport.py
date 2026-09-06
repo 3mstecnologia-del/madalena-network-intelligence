@@ -16,7 +16,12 @@ from collectors.intelbras_g08.readonly import (
     G08_READ_ALLOWLIST,
 )
 from collectors.mikrotik.collector import MikroTikCollector
-from collectors.mikrotik.readonly import MIKROTIK_READ_ALLOWLIST
+from collectors.mikrotik.readonly import (
+    MIKROTIK_DHCP_COMMANDS,
+    MIKROTIK_FULL_COMMANDS,
+    MIKROTIK_LIGHT_COMMANDS,
+    MIKROTIK_READ_ALLOWLIST,
+)
 from collectors.mikrotik.transport_api import (
     cli_command_to_api,
     encode_length,
@@ -141,7 +146,7 @@ def test_collect_via_transport_partial():
         "/system identity print": (FIX / "mikrotik_identity.txt").read_text(),
         "/interface print detail": (FIX / "mikrotik_interfaces.txt").read_text(),
         "/ip arp print detail": (FIX / "mikrotik_arp.txt").read_text(),
-        "/ip dhcp-server lease print detail": (FIX / "mikrotik_dhcp.txt").read_text(),
+        "/ip dhcp-server lease print detail without-paging": (FIX / "mikrotik_dhcp.txt").read_text(),
         "/ip neighbor print detail": (FIX / "mikrotik_neighbors.txt").read_text(),
     }
     errors = {
@@ -163,7 +168,7 @@ def test_collect_via_transport_complete_full():
     outputs = {
         "/system identity print": (FIX / "mikrotik_identity.txt").read_text(),
         "/ip arp print detail": (FIX / "mikrotik_arp.txt").read_text(),
-        "/ip dhcp-server lease print detail": (FIX / "mikrotik_dhcp.txt").read_text(),
+        "/ip dhcp-server lease print detail without-paging": (FIX / "mikrotik_dhcp.txt").read_text(),
         "/interface bridge host print detail": (FIX / "mikrotik_fdb.txt").read_text(),
         "/system resource print": "version=7.15",
         "/interface print detail": (FIX / "mikrotik_interfaces.txt").read_text(),
@@ -177,6 +182,22 @@ def test_collect_via_transport_complete_full():
     assert result.identity.name == "LAB-ROUTER"
     assert len(result.interfaces) == 3
     assert len(result.neighbors) == 2
+
+
+def test_dhcp_command_uses_without_paging():
+    """FULL/LIGHT DHCP must disable paging so a long lease table never truncates.
+
+    The dhcp-only path already used `without-paging`; the FULL/LIGHT path lagged
+    behind. On a large lease table the default pager can truncate the final row,
+    which the parser then flags as a parse_failure and wrongly downgrades a full
+    collection to `partial`.
+    """
+    dhcp_light = dict(MIKROTIK_LIGHT_COMMANDS)["dhcp"]
+    dhcp_full = dict(MIKROTIK_FULL_COMMANDS)["dhcp"]
+    dhcp_only = dict(MIKROTIK_DHCP_COMMANDS)["dhcp"]
+    for cmd in (dhcp_light, dhcp_full, dhcp_only):
+        assert cmd == "/ip dhcp-server lease print detail without-paging"
+        assert "without-paging" in cmd
 
 
 def test_g08_readonly_refuses_config():

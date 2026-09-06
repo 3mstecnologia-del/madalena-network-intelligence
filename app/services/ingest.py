@@ -525,6 +525,7 @@ class IngestService:
                     mac=om.mac,
                     ont_id=om.ont_id,
                     pon=om.pon,
+                    serial=getattr(om, "serial", None),
                     vlan_id=om.vlan_id,
                     gem=om.gem,
                     first_seen=om.observed_at,
@@ -539,6 +540,7 @@ class IngestService:
         row.pon = om.pon or row.pon
         row.vlan_id = om.vlan_id if om.vlan_id is not None else row.vlan_id
         row.gem = om.gem or row.gem
+        row.serial = getattr(om, "serial", None) or row.serial
         if getattr(om, "command", None):
             row.command = om.command
         row.source = om.source or row.source
@@ -809,6 +811,23 @@ class IngestService:
             self._materialize_physical_link(tenant_id, local, remote_hint, link, run_id)
         return counts
 
+    def _is_bilateral(self, tenant_id, a_id, b_id) -> bool:
+        """True when an observation in BOTH directions exists (A observes B and
+        B observes A). A unilateral observation stays valid evidence but is not
+        a confirmed direct link; PhysicalLink.directly_observed is set from this
+        so unilateral links are distinguishable from bilateral at the model level.
+        """
+        rev = self.db.scalar(
+            select(TopologyObservation.id)
+            .where(
+                TopologyObservation.tenant_id == tenant_id,
+                TopologyObservation.local_device_id == b_id,
+                TopologyObservation.remote_device_id == a_id,
+            )
+            .limit(1)
+        )
+        return rev is not None
+
     def _materialize_physical_link(self, tenant_id, local, remote_id, link, run_id) -> None:
         a_id, b_id = sorted((local.id, remote_id), key=str)
         physical = self.db.scalar(select(PhysicalLink).where(
@@ -826,11 +845,16 @@ class IngestService:
         )) if link.remote_interface else None
         ia = local_iface if local.id == a_id else remote_iface
         ib = remote_iface if local.id == a_id else local_iface
+        # A link is directly_observed only when BOTH sides observed it. A lone
+        # unilateral observation materializes as inferred/lower-confidence so
+        # the consolidated model never conflates it with a confirmed link.
+        bilateral = self._is_bilateral(tenant_id, local.id, remote_id)
+        link_confidence = link.confidence if bilateral else min(link.confidence, 0.7)
         if physical is None:
             physical = PhysicalLink(tenant_id=tenant_id, device_a_id=a_id, device_b_id=b_id,
                 interface_a_id=ia.id if ia else None, interface_b_id=ib.id if ib else None,
-                directly_observed=link.directly_observed, inferred=not link.directly_observed,
-                confidence=link.confidence, first_seen=link.observed_at, last_seen=link.observed_at)
+                directly_observed=bilateral, inferred=not bilateral,
+                confidence=link_confidence, first_seen=link.observed_at, last_seen=link.observed_at)
             self.db.add(physical)
             self.db.flush()
         else:
@@ -838,9 +862,14 @@ class IngestService:
             physical.interface_b_id = physical.interface_b_id or (ib.id if ib else None)
             physical.first_seen = min(_as_utc(physical.first_seen), _as_utc(link.observed_at))
             physical.last_seen = max(_as_utc(physical.last_seen), _as_utc(link.observed_at))
-            physical.directly_observed = physical.directly_observed or link.directly_observed
-            physical.inferred = physical.inferred and not link.directly_observed
-            physical.confidence = max(physical.confidence, link.confidence)
+            # Promote unilateral -> bilateral once the reverse arrives.
+            promoted = bilateral and not physical.directly_observed
+            physical.directly_observed = physical.directly_observed or bilateral
+            physical.inferred = not physical.directly_observed
+            if promoted:
+                physical.confidence = link.confidence
+            else:
+                physical.confidence = max(physical.confidence, link_confidence)
         self.db.add(LinkEvidence(tenant_id=tenant_id, physical_link_id=physical.id,
             source=link.source, protocol=link.protocol, observed_at=link.observed_at,
             collection_run_id=run_id, directly_observed=link.directly_observed,

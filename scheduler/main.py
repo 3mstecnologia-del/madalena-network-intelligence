@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from app.core.collectors_config import enabled_collectors
@@ -286,6 +287,29 @@ def _collect_one(db, ingest: IngestService, device: Device, device_type: str, li
         )
 
 
+def full_cron_times(cron_spec: Optional[str]) -> list[tuple[int, int]]:
+    """Parse a 'HH:MM,HH:MM,...' spec into sorted (hour, minute) pairs.
+
+    Invalid tokens are skipped (a malformed schedule entry must never crash the
+    scheduler, and a missing entry degrades to fewer FULL runs rather than a
+    blocked process). Returns the requested times in input order.
+    """
+    out: list[tuple[int, int]] = []
+    for token in (cron_spec or "").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        hour_raw, _, minute_raw = token.partition(":")
+        try:
+            hour = int(hour_raw)
+            minute = int(minute_raw or "0")
+        except ValueError:
+            continue
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            out.append((hour, minute))
+    return out
+
+
 def _shutdown(signum, _frame) -> None:
     log.info("scheduler stopping signal=%s", signum)
     if _scheduler is not None and _scheduler.running:
@@ -304,54 +328,34 @@ def main() -> None:
             write_heartbeat()
             time.sleep(30)
     if once:
-        run_mikrotik_lightweight()
-        run_olt()
-        run_unifi()
+        # Manual run: everything, full. No automatic light runs exist anymore.
+        run_full_inventory()
         return
     _start_heartbeat_thread()
-    _scheduler = BlockingScheduler(timezone="UTC")
-    _scheduler.add_job(
-        run_mikrotik_lightweight,
-        "interval",
-        seconds=settings.scheduler_mikrotik_interval_sec,
-        id="mikrotik_light",
-        max_instances=1,
-        coalesce=True,
-    )
-    _scheduler.add_job(
-        run_olt,
-        "interval",
-        seconds=settings.scheduler_olt_interval_sec,
-        id="olt",
-        max_instances=1,
-        coalesce=True,
-    )
-    _scheduler.add_job(
-        run_unifi,
-        "interval",
-        seconds=settings.scheduler_unifi_interval_sec,
-        id="unifi",
-        max_instances=1,
-        coalesce=True,
-    )
-    _scheduler.add_job(
-        run_full_inventory,
-        "interval",
-        seconds=settings.scheduler_full_inventory_interval_sec,
-        id="full_inventory",
-        max_instances=1,
-        coalesce=True,
-    )
+    _scheduler = BlockingScheduler(timezone=settings.scheduler_timezone)
+    times = full_cron_times(settings.scheduler_full_cron)
+    if not times:
+        log.error("SCHEDULER_FULL_CRON empty/invalid=%r — no automatic runs", settings.scheduler_full_cron)
+        # Idle-but-alive: keep the heartbeat/healthcheck meaningful and safe.
+        while True:
+            write_heartbeat()
+            time.sleep(30)
+    for idx, (hour, minute) in enumerate(times):
+        _scheduler.add_job(
+            run_full_inventory,
+            CronTrigger(hour=hour, minute=minute, timezone=settings.scheduler_timezone),
+            id=f"full_run_{idx:02d}_{hour:02d}{minute:02d}",
+            max_instances=1,
+            coalesce=True,
+        )
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
     log.info(
-        "scheduler started mikrotik=%ss olt=%ss unifi=%ss full=%ss",
-        settings.scheduler_mikrotik_interval_sec,
-        settings.scheduler_olt_interval_sec,
-        settings.scheduler_unifi_interval_sec,
-        settings.scheduler_full_inventory_interval_sec,
+        "scheduler started colletion cron=%s tz=%s full_runs=%d",
+        settings.scheduler_full_cron,
+        settings.scheduler_timezone,
+        len(times),
     )
-    run_mikrotik_lightweight()
     _scheduler.start()
 
 

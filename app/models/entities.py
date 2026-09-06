@@ -384,6 +384,7 @@ class OltMacObservation(Base):
     mac: Mapped[str] = mapped_column(String(17), nullable=False, index=True)
     ont_id: Mapped[Optional[str]] = mapped_column(String(32), index=True)
     pon: Mapped[Optional[str]] = mapped_column(String(32))
+    serial: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     vlan_id: Mapped[Optional[int]] = mapped_column(Integer)
     gem: Mapped[Optional[str]] = mapped_column(String(32))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

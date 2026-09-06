@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     secret_provider: str = "infisical"
     api_base_url: str = "http://api:8000"
     scheduler_enabled: bool = True
-    scheduler_mikrotik_interval_sec: int = 900
-    scheduler_olt_interval_sec: int = 1800
-    scheduler_unifi_interval_sec: int = 1800
-    scheduler_full_inventory_interval_sec: int = 21600
+    # Automatic collection policy: only N FULL runs per day (comma-separated
+    # HH:MM in scheduler_timezone). Intermediate/light auto jobs are removed.
+    scheduler_full_cron: str = "07:00,12:00,18:00,23:59"
+    scheduler_timezone: str = "America/Sao_Paulo"
     mcp_http_host: str = "0.0.0.0"
     mcp_http_port: int = 8081
     seed_tenant_slug: str = "example-tenant"

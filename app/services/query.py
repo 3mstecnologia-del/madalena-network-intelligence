@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -15,8 +16,10 @@ from app.correlation.topology import TopologyCorrelator
 from app.models.entities import (
     CollectionRun,
     Device,
+    DeviceIdentifier,
     Interface,
     InterfaceObservation,
+    OltMacObservation,
     PhysicalLink,
     LinkEvidence,
     IpAddress,
@@ -385,3 +388,136 @@ class QueryService:
             limit=limit,
             offset=offset,
         )
+
+    # ---- OLT MAC -> device location correlation -----------------------------
+
+    def _device_ids_for_mac(self, tenant_id, mac: str) -> set:
+        """Devices whose trustworthy identity includes this MAC.
+
+        Resolution order mirrors the correlation engine: chassis_mac, interface
+        MAC, then device_identifiers(kind='mac'|'serial' value). A MAC mapping to
+        several devices is reported as ambiguous (never guessed).
+        """
+        ids: set = set()
+        for dev in self.db.scalars(
+            select(Device).where(Device.tenant_id == tenant_id, Device.chassis_mac == mac)
+        ):
+            ids.add(dev.id)
+        for iface in self.db.scalars(
+            select(Interface).where(Interface.tenant_id == tenant_id, Interface.mac == mac)
+        ):
+            ids.add(iface.device_id)
+        for row in self.db.scalars(
+            select(DeviceIdentifier).where(
+                DeviceIdentifier.tenant_id == tenant_id,
+                DeviceIdentifier.kind == "mac",
+                DeviceIdentifier.value == mac,
+            )
+        ):
+            ids.add(row.device_id)
+        return ids
+
+    def olt_locations(
+        self,
+        tenant_slug: str,
+        *,
+        mac: str | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> dict:
+        """Correlate OLT-learned MACs (behind ONUs) with known devices.
+
+        A MAC learned on the OLT proves the equipment was observed BEHIND that
+        ONU/PON/OLT — a location/path evidence. It does not by itself prove a
+        direct ONU<->device cable, because a switch/bridge may sit in between.
+        No PhysicalLink is inferred here; raw OltMacObservation rows are always
+        preserved and returned.
+        """
+        tenant = self.require_tenant(tenant_slug)
+        q = select(OltMacObservation).where(OltMacObservation.tenant_id == tenant.id)
+        if mac:
+            try:
+                mac_n = normalize_mac(mac)
+            except ValueError:
+                mac_n = mac
+            q = q.where(OltMacObservation.mac == mac_n)
+
+        rows = list(
+            self.db.scalars(
+                q.order_by(OltMacObservation.last_seen.desc()).offset(offset).limit(limit)
+            )
+        )
+        total_all = self.db.scalar(
+            select(func.count()).select_from(OltMacObservation).where(
+                OltMacObservation.tenant_id == tenant.id
+            )
+        ) or 0
+
+        resolve_cache: dict[str, tuple[Optional[UUID], bool]] = {}
+        mac_to_devices: dict[str, dict] = {}
+        per_device: dict[UUID, dict] = {}
+
+        for row in rows:
+            if row.mac not in resolve_cache:
+                ids = self._device_ids_for_mac(tenant.id, row.mac)
+                if len(ids) == 1:
+                    resolve_cache[row.mac] = (next(iter(ids)), False)
+                elif len(ids) > 1:
+                    resolve_cache[row.mac] = (None, True)
+                else:
+                    resolve_cache[row.mac] = (None, False)
+            dev_id, ambiguous = resolve_cache[row.mac]
+            entry = mac_to_devices.setdefault(
+                row.mac,
+                {"mac": row.mac, "resolved_device_id": None, "resolved_device": None,
+                 "resolved": False, "ambiguous": ambiguous, "locations": []},
+            )
+            if dev_id is not None and entry["resolved_device_id"] is None:
+                entry["resolved_device_id"] = str(dev_id)
+                entry["resolved"] = True
+                device = self.db.get(Device, dev_id)
+                entry["resolved_device"] = device.name if device else None
+                entry["device_type"] = device.device_type if device else None
+                per_device.setdefault(
+                    dev_id,
+                    {"device_id": str(dev_id), "name": device.name if device else None,
+                     "device_type": device.device_type if device else None,
+                     "locations": {}, "macs": {}},
+                )["macs"][row.mac] = True
+            loc = {"ont_id": row.ont_id, "pon": row.pon, "serial": row.serial,
+                   "vlan_id": row.vlan_id, "first_seen": row.first_seen.isoformat() if row.first_seen else None,
+                   "last_seen": row.last_seen.isoformat() if row.last_seen else None}
+            entry["locations"].append(loc)
+            if dev_id is not None:
+                dloc = per_device[dev_id]["locations"]
+                key = (row.ont_id, row.pon, row.serial)
+                d = dloc.setdefault(key, {"ont_id": row.ont_id, "pon": row.pon,
+                                          "serial": row.serial, "macs": [], "first_seen": loc["first_seen"],
+                                          "last_seen": row.last_seen.isoformat() if row.last_seen else None})
+                if row.mac not in d["macs"]:
+                    d["macs"].append(row.mac)
+                if loc["first_seen"] and (not d["first_seen"] or loc["first_seen"] < d["first_seen"]):
+                    d["first_seen"] = loc["first_seen"]
+
+        mac_items = list(mac_to_devices.values())
+        resolved_count = sum(1 for v in mac_items if v["resolved"])
+        ambiguous_count = sum(1 for v in mac_items if v["ambiguous"])
+        device_items = []
+        for dev in per_device.values():
+            dev["locations"] = list(dev["locations"].values())
+            device_items.append(dev)
+
+        return {
+            "tenant": tenant.slug,
+            "total_olt_mac_rows": int(total_all),
+            "queried_rows": len(rows),
+            "distinct_macs": len(mac_items),
+            "resolved_macs": resolved_count,
+            "ambiguous_macs": ambiguous_count,
+            "unresolved_macs": len(mac_items) - resolved_count - ambiguous_count,
+            "devices_localized": len(device_items),
+            "devices": device_items,
+            "macs": mac_items,
+            "limit": limit,
+            "offset": offset,
+        }

@@ -369,6 +369,59 @@ def test_interfaces_and_physical_links_api_isolated_paginated_and_historical(db:
         app.dependency_overrides.clear()
 
 
+def test_unilateral_link_is_inferred_until_reverse_confirms(db: Session):
+    """A lone unilateral observation materializes as inferred/lower-confidence;
+    the reverse observation promotes the consolidated link to directly_observed
+    with full confidence (one PhysicalLink, two LinkEvidence rows)."""
+    tenant, _, mk, sw, *_ = seed_two_tenants(db)
+    mk.chassis_mac = MAC_MK
+    sw.chassis_mac = MAC_SW
+    ingest = IngestService(db)
+    # Only MK observes SW -> unilateral.
+    ingest.ingest_result(
+        tenant_id=tenant.id,
+        device_id=mk.id,
+        result=CollectorResult(
+            topology_links=[
+                NormalizedTopologyLink(
+                    local_interface="ether1", remote_mac=MAC_SW,
+                    remote_interface="ether2", source="mikrotik_neighbor",
+                    observed_at=_ts(1), directly_observed=True,
+                )
+            ],
+        ),
+    )
+    db.commit()
+    links = list(db.scalars(select(PhysicalLink).where(PhysicalLink.tenant_id == tenant.id)))
+    assert len(links) == 1
+    assert links[0].directly_observed is False
+    assert links[0].inferred is True
+    assert links[0].confidence < 1.0
+
+    # SW now observes MK -> reverse arrives -> promote.
+    ingest.ingest_result(
+        tenant_id=tenant.id,
+        device_id=sw.id,
+        result=CollectorResult(
+            topology_links=[
+                NormalizedTopologyLink(
+                    local_interface="ether2", remote_mac=MAC_MK,
+                    remote_interface="ether1", source="mikrotik_neighbor",
+                    observed_at=_ts(2), directly_observed=True,
+                )
+            ],
+        ),
+    )
+    db.commit()
+    links = list(db.scalars(select(PhysicalLink).where(PhysicalLink.tenant_id == tenant.id)))
+    assert len(links) == 1  # still one consolidated link
+    assert links[0].directly_observed is True
+    assert links[0].inferred is False
+    assert links[0].confidence == 1.0
+    evidence = list(db.scalars(select(LinkEvidence).where(LinkEvidence.physical_link_id == links[0].id)))
+    assert len(evidence) == 2  # both directions preserved
+
+
 def test_new_inventory_device_records_identifiers_at_first_ingest(db: Session):
     """A UniFi node materializing a brand-new Device must write a
     device_identifiers row (source_id/serial) immediately — not only on a later
