@@ -21,6 +21,10 @@ from app.models.entities import (
     Device,
     DhcpLease,
     Interface,
+    InterfaceObservation,
+    DeviceIdentifier,
+    LinkEvidence,
+    PhysicalLink,
     InventoryNodeObservation,
     IpAddress,
     MacAddress,
@@ -156,7 +160,7 @@ class IngestService:
                 owner = self._device_by_source_ref(tenant_id, owner_ref)
                 if owner is not None:
                     owner_id = owner.id
-            c, u = self._upsert_interface(tenant_id, owner_id, iface)
+            c, u = self._upsert_interface(tenant_id, owner_id, iface, run_id)
             created += c
             updated += u
 
@@ -262,7 +266,7 @@ class IngestService:
             self.db.add(row)
         self._ip_rows[key] = row
 
-    def _upsert_interface(self, tenant_id, device_id, iface) -> tuple[int, int]:
+    def _upsert_interface(self, tenant_id, device_id, iface, run_id=None) -> tuple[int, int]:
         row = self.db.scalar(
             select(Interface).where(
                 Interface.device_id == device_id,
@@ -270,8 +274,7 @@ class IngestService:
             )
         )
         if row is None:
-            self.db.add(
-                Interface(
+            row = Interface(
                     tenant_id=tenant_id,
                     device_id=device_id,
                     name=iface.name,
@@ -282,17 +285,35 @@ class IngestService:
                     first_seen=iface.observed_at,
                     last_seen=iface.observed_at,
                     observed_at=iface.observed_at,
+                    description=getattr(iface, "description", None),
+                    source=iface.source,
+                    source_identifiers=getattr(iface, "identifiers", {}),
+                    collection_run_id=run_id,
                 )
-            )
-            return 1, 0
-        row.if_type = iface.if_type or row.if_type
-        row.admin_status = iface.admin_status or row.admin_status
-        row.oper_status = iface.oper_status or row.oper_status
-        row.mac = iface.mac or row.mac
-        row.last_seen = iface.observed_at
-        row.observed_at = iface.observed_at
+            self.db.add(row)
+            self.db.flush()
+            counts = (1, 0)
+        else:
+            row.if_type = iface.if_type or row.if_type
+            row.admin_status = iface.admin_status or row.admin_status
+            row.oper_status = iface.oper_status or row.oper_status
+            row.mac = iface.mac or row.mac
+            row.description = getattr(iface, "description", None) or row.description
+            row.source = iface.source
+            row.source_identifiers = getattr(iface, "identifiers", {}) or row.source_identifiers
+            row.last_seen = iface.observed_at
+            row.observed_at = iface.observed_at
+            row.collection_run_id = run_id
+            counts = (0, 1)
         self.db.add(row)
-        return 0, 1
+        self.db.add(InterfaceObservation(
+            tenant_id=tenant_id, interface_id=row.id, device_id=device_id,
+            observed_at=iface.observed_at, source=iface.source, collection_run_id=run_id,
+            name=iface.name, description=getattr(iface, "description", None), if_type=iface.if_type,
+            admin_status=iface.admin_status, oper_status=iface.oper_status, mac=iface.mac,
+            source_identifiers=getattr(iface, "identifiers", {}), evidence=getattr(iface, "evidence", {}),
+        ))
+        return counts
 
     def _upsert_dhcp(self, tenant_id, device_id, lease, run_id) -> tuple[int, int]:
         row = self.db.scalar(
@@ -504,6 +525,7 @@ class IngestService:
                     mac=om.mac,
                     ont_id=om.ont_id,
                     pon=om.pon,
+                    serial=getattr(om, "serial", None),
                     vlan_id=om.vlan_id,
                     gem=om.gem,
                     first_seen=om.observed_at,
@@ -518,6 +540,7 @@ class IngestService:
         row.pon = om.pon or row.pon
         row.vlan_id = om.vlan_id if om.vlan_id is not None else row.vlan_id
         row.gem = om.gem or row.gem
+        row.serial = getattr(om, "serial", None) or row.serial
         if getattr(om, "command", None):
             row.command = om.command
         row.source = om.source or row.source
@@ -587,7 +610,7 @@ class IngestService:
             tenant_id=tenant_id,
             site_id=controller.site_id,
             name=self._unique_device_name(controller.site_id, preferred),
-            device_type="unifi",
+            device_type=node.category or "unifi_device",
             vendor="Ubiquiti",
             model=node.model,
             enabled=False,
@@ -598,6 +621,15 @@ class IngestService:
             last_observed_at=node.observed_at,
         )
         self.db.add(device)
+        self.db.flush()
+        # Record the device's trustworthy identifiers (source_id/serial/chassis)
+        # even at first materialization, so cross-collector correlation via
+        # device_identifiers works from the very first ingest, not only after a
+        # subsequent run resolves an existing row by source_ref/MAC.
+        for kind, value in getattr(node, "identifiers", {}).items():
+            self.db.add(DeviceIdentifier(tenant_id=device.tenant_id, device_id=device.id,
+                kind=kind, value=value, source=node.source,
+                first_seen=node.observed_at, last_seen=node.observed_at))
         self.db.flush()
         return device
 
@@ -613,7 +645,22 @@ class IngestService:
         if node.firmware:
             device.last_version = node.firmware
         device.last_observed_at = node.observed_at
+        if node.category:
+            device.device_type = node.category
         self.db.add(device)
+        for kind, value in getattr(node, "identifiers", {}).items():
+            existing = self.db.scalar(select(DeviceIdentifier).where(
+                DeviceIdentifier.tenant_id == device.tenant_id,
+                DeviceIdentifier.device_id == device.id,
+                DeviceIdentifier.kind == kind,
+                DeviceIdentifier.value == value,
+            ))
+            if existing is None:
+                self.db.add(DeviceIdentifier(tenant_id=device.tenant_id, device_id=device.id,
+                    kind=kind, value=value, source=node.source,
+                    first_seen=node.observed_at, last_seen=node.observed_at))
+            else:
+                existing.last_seen = node.observed_at
 
     def _upsert_inventory(self, tenant_id, controller_id, node, run_id) -> tuple[int, int]:
         observed = self._match_or_create_inventory_device(tenant_id, controller_id, node)
@@ -689,6 +736,23 @@ class IngestService:
         if link.remote_source_id:
             found = self._device_by_source_ref(tenant_id, link.remote_source_id)
             return found.id if found else None
+        candidates: set = set()
+        identifiers = dict(getattr(link, "remote_identifiers", {}) or {})
+        if getattr(link, "remote_chassis_id", None):
+            identifiers["chassis_id"] = link.remote_chassis_id
+        if link.remote_ip:
+            identifiers["management_ip"] = link.remote_ip
+        for kind, value in identifiers.items():
+            for row in self.db.scalars(select(DeviceIdentifier).where(
+                DeviceIdentifier.tenant_id == tenant_id,
+                DeviceIdentifier.kind == kind,
+                DeviceIdentifier.value == value,
+            )):
+                candidates.add(row.device_id)
+            if kind == "chassis_id":
+                candidates.update(d.id for d in self._devices_for_mac(tenant_id, value))
+        if len(candidates) == 1:
+            return candidates.pop()
         return None
 
     def _upsert_topology(self, tenant_id, collector_id, link, run_id) -> tuple[int, int]:
@@ -730,15 +794,84 @@ class IngestService:
                     collection_run_id=run_id,
                 )
             )
-            return 1, 0
-        if remote_hint:
-            row.remote_device_id = remote_hint
-        row.remote_interface = link.remote_interface or row.remote_interface
-        row.remote_identity = link.remote_identity or row.remote_identity
-        row.remote_ip = link.remote_ip or row.remote_ip
-        row.remote_source_id = link.remote_source_id or row.remote_source_id
-        row.last_seen = link.observed_at
-        row.observed_at = link.observed_at
-        row.collection_run_id = run_id
-        self.db.add(row)
-        return 0, 1
+            counts = (1, 0)
+        else:
+            if remote_hint:
+                row.remote_device_id = remote_hint
+            row.remote_interface = link.remote_interface or row.remote_interface
+            row.remote_identity = link.remote_identity or row.remote_identity
+            row.remote_ip = link.remote_ip or row.remote_ip
+            row.remote_source_id = link.remote_source_id or row.remote_source_id
+            row.last_seen = link.observed_at
+            row.observed_at = link.observed_at
+            row.collection_run_id = run_id
+            self.db.add(row)
+            counts = (0, 1)
+        if remote_hint and remote_hint != local.id:
+            self._materialize_physical_link(tenant_id, local, remote_hint, link, run_id)
+        return counts
+
+    def _is_bilateral(self, tenant_id, a_id, b_id) -> bool:
+        """True when an observation in BOTH directions exists (A observes B and
+        B observes A). A unilateral observation stays valid evidence but is not
+        a confirmed direct link; PhysicalLink.directly_observed is set from this
+        so unilateral links are distinguishable from bilateral at the model level.
+        """
+        rev = self.db.scalar(
+            select(TopologyObservation.id)
+            .where(
+                TopologyObservation.tenant_id == tenant_id,
+                TopologyObservation.local_device_id == b_id,
+                TopologyObservation.remote_device_id == a_id,
+            )
+            .limit(1)
+        )
+        return rev is not None
+
+    def _materialize_physical_link(self, tenant_id, local, remote_id, link, run_id) -> None:
+        a_id, b_id = sorted((local.id, remote_id), key=str)
+        physical = self.db.scalar(select(PhysicalLink).where(
+            PhysicalLink.tenant_id == tenant_id,
+            PhysicalLink.device_a_id == a_id,
+            PhysicalLink.device_b_id == b_id,
+        ))
+        local_iface = self.db.scalar(select(Interface).where(
+            Interface.tenant_id == tenant_id, Interface.device_id == local.id,
+            Interface.name == link.local_interface,
+        )) if link.local_interface else None
+        remote_iface = self.db.scalar(select(Interface).where(
+            Interface.tenant_id == tenant_id, Interface.device_id == remote_id,
+            Interface.name == link.remote_interface,
+        )) if link.remote_interface else None
+        ia = local_iface if local.id == a_id else remote_iface
+        ib = remote_iface if local.id == a_id else local_iface
+        # A link is directly_observed only when BOTH sides observed it. A lone
+        # unilateral observation materializes as inferred/lower-confidence so
+        # the consolidated model never conflates it with a confirmed link.
+        bilateral = self._is_bilateral(tenant_id, local.id, remote_id)
+        link_confidence = link.confidence if bilateral else min(link.confidence, 0.7)
+        if physical is None:
+            physical = PhysicalLink(tenant_id=tenant_id, device_a_id=a_id, device_b_id=b_id,
+                interface_a_id=ia.id if ia else None, interface_b_id=ib.id if ib else None,
+                directly_observed=bilateral, inferred=not bilateral,
+                confidence=link_confidence, first_seen=link.observed_at, last_seen=link.observed_at)
+            self.db.add(physical)
+            self.db.flush()
+        else:
+            physical.interface_a_id = physical.interface_a_id or (ia.id if ia else None)
+            physical.interface_b_id = physical.interface_b_id or (ib.id if ib else None)
+            physical.first_seen = min(_as_utc(physical.first_seen), _as_utc(link.observed_at))
+            physical.last_seen = max(_as_utc(physical.last_seen), _as_utc(link.observed_at))
+            # Promote unilateral -> bilateral once the reverse arrives.
+            promoted = bilateral and not physical.directly_observed
+            physical.directly_observed = physical.directly_observed or bilateral
+            physical.inferred = not physical.directly_observed
+            if promoted:
+                physical.confidence = link.confidence
+            else:
+                physical.confidence = max(physical.confidence, link_confidence)
+        self.db.add(LinkEvidence(tenant_id=tenant_id, physical_link_id=physical.id,
+            source=link.source, protocol=link.protocol, observed_at=link.observed_at,
+            collection_run_id=run_id, directly_observed=link.directly_observed,
+            inferred=not link.directly_observed, confidence=link.confidence,
+            evidence=getattr(link, "evidence", {}) or {}))

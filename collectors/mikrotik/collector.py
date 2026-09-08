@@ -71,10 +71,12 @@ class MikroTikCollector:
                     remote_mac=n.mac,
                     remote_ip=n.ip_address,
                     remote_identity=n.identity,
+                    remote_chassis_id=n.chassis_id,
                     remote_interface=n.remote_interface,
                     protocol=n.protocol,
                     observed_at=n.observed_at,
                     source=n.source,
+                    evidence={"protocol": n.protocol, "chassis_id": n.chassis_id},
                 )
                 for n in neighbors
             ],

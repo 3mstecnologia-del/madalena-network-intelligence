@@ -14,6 +14,7 @@
 acessos.env
 secrets
 credentials
+!app/cdr/secret_runtime.py
 
 # Local runtime and evidence artifacts
 private-evidence

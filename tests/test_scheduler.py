@@ -9,10 +9,23 @@ from app.models.entities import CollectionRun, DeviceCredentialReference, DhcpLe
 from app.services.ingest import IngestService
 from collectors.common.types import CollectorResult, NormalizedDhcpLease
 from collectors.mikrotik.collector import MikroTikCollector
-from scheduler.main import _collect_one
+from scheduler.main import _collect_one, full_cron_times
 from tests.conftest import seed_two_tenants
 
 MAC = "AA:BB:CC:DD:EE:FF"
+
+
+def test_full_cron_times_parses_only_valid_hhmm():
+    assert full_cron_times("07:00,12:00,18:00,23:59") == [
+        (7, 0),
+        (12, 0),
+        (18, 0),
+        (23, 59),
+    ]
+    # Invalid/out-of-range tokens are skipped, never crash the scheduler.
+    assert full_cron_times("25:00,abc,9:5,,07:60") == [(9, 5)]
+    assert full_cron_times("") == []
+    assert full_cron_times(None) == []
 
 
 def test_scheduler_continues_after_one_device_fails(db: Session, monkeypatch):

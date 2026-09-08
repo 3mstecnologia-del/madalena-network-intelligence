@@ -114,6 +114,8 @@ def register_device(
             device.vendor = vendor or device.vendor
             device.model = model or device.model
             device.enabled = enabled
+            if collectors_enabled is not None:
+                device.collectors_enabled = _json_list(collectors_enabled)
             db.add(device)
 
         ref = db.scalar(

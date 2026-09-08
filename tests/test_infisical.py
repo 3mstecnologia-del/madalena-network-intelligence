@@ -156,3 +156,36 @@ def test_resolve_secrets_canonical_olt_user_and_ip(monkeypatch, fake_server):
     assert resolved.host == "192.0.2.201"
     assert resolved.username == "g08op"
     assert resolved.protocol == "ssh"
+
+
+def test_resolve_secrets_overlay_host_only(monkeypatch):
+    """A device addressed ONLY via OVERLAY_HOST (no HOST in the Cofre) resolves.
+
+    Regression: the existence check used to key on `host` (HOST/IP) and return
+    None before considering the in-band OVERLAY_HOST, so overlay-only edge
+    routers (UNIPLAC MK-ISO/MK-PON/3MS-ROUTER) never resolved.
+    """
+    monkeypatch.delenv("MK_OVERLAY24_HOST", raising=False)
+    monkeypatch.delenv("MK_OVERLAY24_IP", raising=False)
+    monkeypatch.setenv("MK_OVERLAY24_USERNAME", "matheus")
+    monkeypatch.setenv("MK_OVERLAY24_PASSWORD", "sekret")
+    monkeypatch.setenv("MK_OVERLAY24_SSH_PORT", "8822")
+    monkeypatch.setenv("MK_OVERLAY24_OVERLAY_HOST", "192.0.2.205")
+    resolved = resolve_secrets("env", "MK_OVERLAY24")
+    assert resolved is not None
+    assert resolved.host == "192.0.2.205"
+    assert resolved.port == 8822
+    assert resolved.username == "matheus"
+
+
+def test_resolve_secrets_madalena_password_alias(monkeypatch):
+    """Cofre layout {PREFIX}_MADALENA_PASSWORD is honored as the password slot."""
+    monkeypatch.delenv("MK_ALIAS_HOST", raising=False)
+    monkeypatch.delenv("MK_ALIAS_PASSWORD", raising=False)
+    monkeypatch.setenv("MK_ALIAS_IP", "192.0.2.206")
+    monkeypatch.setenv("MK_ALIAS_USER", "madalena")
+    monkeypatch.setenv("MK_ALIAS_MADALENA_PASSWORD", "sekret")
+    resolved = resolve_secrets("env", "MK_ALIAS")
+    assert resolved is not None
+    assert resolved.password == "sekret"
+    assert resolved.host == "192.0.2.206"

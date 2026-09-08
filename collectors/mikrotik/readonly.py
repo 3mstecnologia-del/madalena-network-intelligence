@@ -28,15 +28,15 @@ MIKROTIK_DHCP_COMMANDS: tuple[tuple[str, str], ...] = (
 
 MIKROTIK_LIGHT_COMMANDS: tuple[tuple[str, str], ...] = (
     ("identity", "/system identity print"),
+    ("interfaces", "/interface print detail"),
     ("arp", "/ip arp print detail"),
-    ("dhcp", "/ip dhcp-server lease print detail"),
+    ("dhcp", "/ip dhcp-server lease print detail without-paging"),
     ("fdb", "/interface bridge host print detail"),
     ("neighbors", "/ip neighbor print detail"),
 )
 
 MIKROTIK_FULL_COMMANDS: tuple[tuple[str, str], ...] = MIKROTIK_LIGHT_COMMANDS + (
     ("resource", "/system resource print"),
-    ("interfaces", "/interface print detail"),
 )
 
 # Map command step key → collector name used in device.collectors_enabled
