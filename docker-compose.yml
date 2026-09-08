@@ -49,8 +49,10 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://madalena:change_me_in_local_env_only@db:5432/madalena}
       NI_SSH_KNOWN_HOSTS: ${NI_SSH_KNOWN_HOSTS:-/run/ssh/known_hosts}
+      INFISICAL_ENV_FILE: /run/secrets/infisical.env
     volumes:
       - ${NI_SSH_KNOWN_HOSTS_FILE:-./deploy/ssh/known_hosts}:/run/ssh/known_hosts:ro
+      - /root/mni-work/.infisical-infra.env:/run/secrets/infisical.env:ro
       - ${NI_TRUST_DIR:-./deploy/tls}:/run/tls:ro
     ports:
       - "8000:8000"
